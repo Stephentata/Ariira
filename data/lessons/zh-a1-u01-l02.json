@@ -1,0 +1,82 @@
+{
+  "id": "zh-a1-u01-l02",
+  "language": "zh",
+  "native_language": "en",
+  "level": "A1",
+  "unit": "greetings-introductions",
+  "title": "Say your name",
+  "objectives": ["say-own-name", "ask-someones-name"],
+  "vocabulary": [
+    {
+      "id": "zh-wo",
+      "text": "我",
+      "transliteration": "wǒ",
+      "translation_en": "I; me",
+      "audio": null,
+      "image": null
+    },
+    {
+      "id": "zh-jiao",
+      "text": "叫",
+      "transliteration": "jiào",
+      "translation_en": "to be called",
+      "audio": null,
+      "image": null
+    },
+    {
+      "id": "zh-mingzi",
+      "text": "名字",
+      "transliteration": "míngzi",
+      "translation_en": "name",
+      "audio": null,
+      "image": null
+    }
+  ],
+  "grammar_point": {
+    "id": "wo-jiao-name",
+    "explanation_en": "Use 我叫 followed by a name to say what you are called.",
+    "pattern": "我叫 + name",
+    "examples": ["我叫 Jamie。", "我叫 Anna。"]
+  },
+  "dialogues": [
+    {
+      "id": "ask-a-name",
+      "lines": [
+        { "speaker": "A", "text": "你叫什么名字？", "transliteration": "Nǐ jiào shénme míngzi?", "translation_en": "What is your name?" },
+        { "speaker": "B", "text": "我叫 Jamie。", "transliteration": "Wǒ jiào Jamie.", "translation_en": "My name is Jamie." }
+      ]
+    }
+  ],
+  "exercises": [
+    {
+      "id": "l02-build-name",
+      "type": "fill_blank",
+      "skill": ["writing", "grammar"],
+      "objective_id": "say-own-name",
+      "difficulty": 1,
+      "prompt": "Complete the pattern: 我 ___ Jamie。",
+      "answer_key": "叫",
+      "accepted_variants": [],
+      "explanation": "叫 means to be called in this sentence pattern.",
+      "hint": "The missing word comes before the name."
+    }
+  ],
+  "roleplay": {
+    "id": "introduce-yourself-zh-a1",
+    "level": "A1",
+    "title": "Introduce yourself",
+    "goal": "Say your name and ask another person's name.",
+    "success_criteria": ["Says own name using 我叫", "Asks the other person's name"],
+    "useful_phrases": [
+      {
+        "id": "zh-wo-jiao-phrase",
+        "text": "我叫 Jamie。",
+        "transliteration": "Wǒ jiào Jamie.",
+        "translation_en": "My name is Jamie.",
+        "audio": null,
+        "image": null
+      }
+    ]
+  },
+  "reviewed": false
+}

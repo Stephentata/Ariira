@@ -1,0 +1,73 @@
+{
+  "id": "zh-a1-u01-l03",
+  "language": "zh",
+  "native_language": "en",
+  "level": "A1",
+  "unit": "greetings-introductions",
+  "title": "Say where you are from",
+  "objectives": ["say-home-country", "ask-where-someone-is-from"],
+  "vocabulary": [
+    {
+      "id": "zh-shi",
+      "text": "是",
+      "transliteration": "shì",
+      "translation_en": "to be",
+      "audio": null,
+      "image": null
+    },
+    {
+      "id": "zh-ren",
+      "text": "人",
+      "transliteration": "rén",
+      "translation_en": "person",
+      "audio": null,
+      "image": null
+    },
+    {
+      "id": "zh-nali",
+      "text": "哪里",
+      "transliteration": "nǎlǐ",
+      "translation_en": "where",
+      "audio": null,
+      "image": null
+    }
+  ],
+  "grammar_point": {
+    "id": "country-person",
+    "explanation_en": "Add 人 after a country name to say that you are from there.",
+    "pattern": "country name + 人",
+    "examples": ["我是英国人。", "我是美国人。"]
+  },
+  "dialogues": [
+    {
+      "id": "where-from",
+      "lines": [
+        { "speaker": "A", "text": "你是哪里人？", "transliteration": "Nǐ shì nǎlǐ rén?", "translation_en": "Where are you from?" },
+        { "speaker": "B", "text": "我是英国人。", "transliteration": "Wǒ shì Yīngguó rén.", "translation_en": "I am British." }
+      ]
+    }
+  ],
+  "exercises": [
+    {
+      "id": "l03-country-person",
+      "type": "sentence_building",
+      "skill": ["writing", "grammar"],
+      "objective_id": "say-home-country",
+      "difficulty": 2,
+      "prompt": "Build the sentence: I am British.",
+      "answer_key": ["我", "是", "英国人"],
+      "accepted_variants": [],
+      "explanation": "Use 我是 before the nationality.",
+      "hint": "Start with 我."
+    }
+  ],
+  "roleplay": {
+    "id": "new-friend-country-zh-a1",
+    "level": "A1",
+    "title": "Meet a new friend",
+    "goal": "Ask where someone is from and answer with your nationality.",
+    "success_criteria": ["Asks where someone is from", "Answers with a country plus 人"],
+    "useful_phrases": []
+  },
+  "reviewed": false
+}

@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ari.language/schemas/vocabulary.schema.json",
+  "title": "Vocabulary item",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "text", "transliteration", "translation_en", "audio", "image"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "text": { "type": "string", "minLength": 1 },
+    "transliteration": { "type": "string" },
+    "translation_en": { "type": "string", "minLength": 1 },
+    "audio": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["src", "license"],
+          "properties": {
+            "src": { "type": "string", "minLength": 1 },
+            "license": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "image": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["src", "license"],
+          "properties": {
+            "src": { "type": "string", "minLength": 1 },
+            "license": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "word_by_word_gloss": { "type": "string" },
+    "example_sentence": { "type": "string" }
+  }
+}

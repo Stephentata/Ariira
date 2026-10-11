@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ari.language/schemas/scenario.schema.json",
+  "title": "Roleplay scenario",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "level", "title", "goal", "success_criteria", "useful_phrases"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "level": { "type": "string", "enum": ["A1", "A2", "B1", "B2"] },
+    "title": { "type": "string", "minLength": 1 },
+    "goal": { "type": "string", "minLength": 1 },
+    "success_criteria": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "useful_phrases": {
+      "type": "array",
+      "items": { "$ref": "https://ari.language/schemas/vocabulary.schema.json" }
+    }
+  }
+}

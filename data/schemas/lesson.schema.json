@@ -1,0 +1,111 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ari.language/schemas/lesson.schema.json",
+  "title": "Language lesson",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "language",
+    "native_language",
+    "level",
+    "unit",
+    "title",
+    "objectives",
+    "vocabulary",
+    "grammar_point",
+    "dialogues",
+    "exercises",
+    "roleplay",
+    "reviewed"
+  ],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z]{2}-[ab][1-2]-u[0-9]{2}-l[0-9]{2}$" },
+    "language": { "type": "string", "pattern": "^[a-z]{2,3}$" },
+    "native_language": { "type": "string", "pattern": "^[a-z]{2,3}$" },
+    "level": { "type": "string", "enum": ["A1", "A2", "B1", "B2"] },
+    "unit": { "type": "string", "minLength": 1 },
+    "title": { "type": "string", "minLength": 1 },
+    "objectives": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "vocabulary": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "https://ari.language/schemas/vocabulary.schema.json" }
+    },
+    "grammar_point": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "explanation_en", "pattern", "examples"],
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "explanation_en": { "type": "string", "minLength": 1 },
+            "pattern": { "type": "string", "minLength": 1 },
+            "examples": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      ]
+    },
+    "dialogues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "lines"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "lines": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["speaker", "text"],
+              "properties": {
+                "speaker": { "type": "string", "minLength": 1 },
+                "text": { "type": "string", "minLength": 1 },
+                "transliteration": { "type": "string" },
+                "translation_en": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "exercises": {
+      "type": "array",
+      "items": { "$ref": "https://ari.language/schemas/exercise.schema.json" }
+    },
+    "roleplay": { "$ref": "https://ari.language/schemas/scenario.schema.json" },
+    "whiteboard_cards": {
+      "type": "array",
+      "items": { "$ref": "https://ari.language/schemas/card.schema.json" }
+    },
+    "reviewed": { "type": "boolean" },
+    "reviewed_by": { "type": "string", "minLength": 1 },
+    "reviewed_at": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "reviewed": { "const": true } }, "required": ["reviewed"] },
+      "then": {
+        "required": ["reviewed_by", "reviewed_at"],
+        "properties": {
+          "reviewed_by": { "type": "string", "minLength": 1 },
+          "reviewed_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  ]
+}

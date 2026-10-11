@@ -1,0 +1,72 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ari.language/schemas/exercise.schema.json",
+  "title": "Lesson exercise",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "type",
+    "skill",
+    "objective_id",
+    "difficulty",
+    "prompt",
+    "answer_key",
+    "accepted_variants",
+    "explanation",
+    "hint"
+  ],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "type": {
+      "type": "string",
+      "enum": [
+        "multiple_choice",
+        "listen_and_choose",
+        "listen_and_type",
+        "fill_blank",
+        "sentence_building",
+        "translate_native_to_target",
+        "translate_target_to_native",
+        "match_pairs",
+        "spot_mistake",
+        "repeat_after_tutor",
+        "answer_aloud",
+        "short_writing",
+        "reading_comprehension"
+      ]
+    },
+    "skill": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": ["listening", "speaking", "reading", "writing", "vocabulary", "grammar"]
+      }
+    },
+    "objective_id": { "type": "string", "minLength": 1 },
+    "difficulty": { "type": "integer", "minimum": 1, "maximum": 5 },
+    "prompt": { "type": "string", "minLength": 1 },
+    "answer_key": {
+      "anyOf": [
+        { "type": "string" },
+        { "type": "array" },
+        { "type": "object" }
+      ]
+    },
+    "accepted_variants": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "explanation": { "type": "string" },
+    "hint": { "type": "string" },
+    "options": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 2,
+      "uniqueItems": true
+    }
+  }
+}

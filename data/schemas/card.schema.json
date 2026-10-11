@@ -1,0 +1,169 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ari.language/schemas/card.schema.json",
+  "title": "Whiteboard card",
+  "oneOf": [
+    { "$ref": "#/definitions/vocab_card" },
+    { "$ref": "#/definitions/grammar_card" },
+    { "$ref": "#/definitions/dialogue_card" },
+    { "$ref": "#/definitions/tone_or_sound_card" },
+    { "$ref": "#/definitions/word_order_card" },
+    { "$ref": "#/definitions/summary_card" }
+  ],
+  "definitions": {
+    "base": {
+      "type": "object",
+      "required": ["id", "type", "title"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "type": "string" },
+        "title": { "type": "string", "minLength": 1 }
+      }
+    },
+    "vocab_card": {
+      "allOf": [
+        { "$ref": "#/definitions/base" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "word", "transliteration", "translation", "example_sentence"],
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "type": { "const": "vocab_card" },
+            "title": { "type": "string", "minLength": 1 },
+            "word": { "type": "string", "minLength": 1 },
+            "transliteration": { "type": "string" },
+            "translation": { "type": "string", "minLength": 1 },
+            "example_sentence": { "type": "string", "minLength": 1 },
+            "image": {
+              "anyOf": [
+                { "type": "null" },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["src", "license"],
+                  "properties": {
+                    "src": { "type": "string", "minLength": 1 },
+                    "license": { "type": "string", "minLength": 1 }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "grammar_card": {
+      "allOf": [
+        { "$ref": "#/definitions/base" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "pattern", "explanation", "examples"],
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "type": { "const": "grammar_card" },
+            "title": { "type": "string", "minLength": 1 },
+            "pattern": { "type": "string", "minLength": 1 },
+            "explanation": { "type": "string", "minLength": 1 },
+            "examples": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 3,
+              "items": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      ]
+    },
+    "dialogue_card": {
+      "allOf": [
+        { "$ref": "#/definitions/base" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "lines"],
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "type": { "const": "dialogue_card" },
+            "title": { "type": "string", "minLength": 1 },
+            "lines": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["speaker", "text"],
+                "properties": {
+                  "speaker": { "type": "string", "minLength": 1 },
+                  "text": { "type": "string", "minLength": 1 },
+                  "transliteration": { "type": "string" },
+                  "translation": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "tone_or_sound_card": {
+      "allOf": [
+        { "$ref": "#/definitions/base" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "sound", "tip"],
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "type": { "const": "tone_or_sound_card" },
+            "title": { "type": "string", "minLength": 1 },
+            "sound": { "type": "string", "minLength": 1 },
+            "tip": { "type": "string", "minLength": 1 },
+            "contour": { "type": "string" }
+          }
+        }
+      ]
+    },
+    "word_order_card": {
+      "allOf": [
+        { "$ref": "#/definitions/base" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "blocks", "answer"],
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "type": { "const": "word_order_card" },
+            "title": { "type": "string", "minLength": 1 },
+            "blocks": {
+              "type": "array",
+              "minItems": 2,
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "answer": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "summary_card": {
+      "allOf": [
+        { "$ref": "#/definitions/base" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "takeaways"],
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "type": { "const": "summary_card" },
+            "title": { "type": "string", "minLength": 1 },
+            "takeaways": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

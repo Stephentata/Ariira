@@ -1,0 +1,74 @@
+{
+  "id": "zh-a1-u01-l01",
+  "language": "zh",
+  "native_language": "en",
+  "level": "A1",
+  "unit": "greetings-introductions",
+  "title": "Say hello",
+  "objectives": ["greet-someone", "say-goodbye"],
+  "vocabulary": [
+    {
+      "id": "zh-nihao",
+      "text": "你好",
+      "transliteration": "nǐ hǎo",
+      "translation_en": "hello",
+      "audio": null,
+      "image": null,
+      "word_by_word_gloss": "you + good"
+    },
+    {
+      "id": "zh-zaijian",
+      "text": "再见",
+      "transliteration": "zài jiàn",
+      "translation_en": "goodbye",
+      "audio": null,
+      "image": null,
+      "word_by_word_gloss": "again + see"
+    }
+  ],
+  "grammar_point": null,
+  "dialogues": [
+    {
+      "id": "hello-goodbye",
+      "lines": [
+        { "speaker": "A", "text": "你好！", "transliteration": "Nǐ hǎo!", "translation_en": "Hello!" },
+        { "speaker": "B", "text": "再见！", "transliteration": "Zàijiàn!", "translation_en": "Goodbye!" }
+      ]
+    }
+  ],
+  "exercises": [
+    {
+      "id": "l01-match-hello",
+      "type": "multiple_choice",
+      "skill": ["reading", "vocabulary"],
+      "objective_id": "greet-someone",
+      "difficulty": 1,
+      "prompt": "What does 你好 mean?",
+      "answer_key": "hello",
+      "accepted_variants": ["hi"],
+      "explanation": "你好 is a common way to say hello.",
+      "hint": "This is a greeting.",
+      "options": ["hello", "goodbye", "thank you"]
+    }
+  ],
+  "roleplay": {
+    "id": "meet-someone-zh-a1",
+    "level": "A1",
+    "title": "Meet someone",
+    "goal": "Greet someone and say goodbye.",
+    "success_criteria": ["Uses a greeting", "Uses a farewell"],
+    "useful_phrases": []
+  },
+  "whiteboard_cards": [
+    {
+      "id": "hello-card",
+      "type": "vocab_card",
+      "title": "Hello",
+      "word": "你好",
+      "transliteration": "nǐ hǎo",
+      "translation": "hello",
+      "example_sentence": "你好！"
+    }
+  ],
+  "reviewed": false
+}

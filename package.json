@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "node --test",
+    "benchmark:tutor": "node scripts/benchmark-tutor.mjs",
     "validate:lessons": "node scripts/validate-lessons.mjs",
     "preview": "vite preview"
   },

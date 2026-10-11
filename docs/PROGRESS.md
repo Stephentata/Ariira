@@ -142,3 +142,47 @@
 - Speech playback and speech recognition depend on browser voices and speech services. Recognition is approximate and may send audio according to the browser provider's privacy policy; Ari does not store learner recordings.
 - The local deck currently adds vocabulary from the lesson whiteboard stage. Words saved from tutor conversations or the translator, account sync, and an FSRS scheduler are not implemented.
 - Incorrect exercise answers and tutor corrections do not yet reprioritize review cards.
+
+## M5 — Tutor chat with local LLM
+
+**Status:** Implemented and verified with the locally installed Ollama model. The prototype is not approved as authoritative Mandarin instruction.
+
+### Works
+
+- Tutor chat uses the `LLMProvider` interface with a local Ollama implementation; requests stay on the local machine and use the Vite development proxy.
+- Ira's Section 10 prompt is filled from a learner profile, lesson context, vocabulary, grammar point, error profile, memory summary, and CEFR level. The current profile is a fixed English-to-Mandarin A1 café practice profile.
+- The prompt and checker apply level-based target-language ratios (A1 30–50%, A2 50–70%, B1 70–90%, B2 90–100%). The check measures Han characters against English letters in the Mandarin reply and its brief English support, with a 4-percentage-point tolerance for this heuristic.
+- Ollama receives a strict structured-output schema. The app validates JSON shape, reply length and sentence count, a two-correction limit, new-word data, optional whiteboard cards against the lesson card types, safe-topic terms, and language ratio before displaying a reply.
+- Corrections, new words, and optional whiteboard cards appear in the transcript as explicitly AI-generated content. They do not change exercise answer keys or automatically enter the review deck.
+- The request includes at most the latest 16 chat messages plus the system prompt. Chat history is kept in page memory only; it is not persisted.
+- Provider success/failure logs include model and latency without logging conversation text. Invalid provider replies are reported in the UI with a retry action; there is no success-shaped fallback.
+
+### Verification
+
+- `npm test`: 36 tests passed, including mock-provider requests, invalid JSON and provider errors, structured-response rejection, prompt ratios, safe redirects, context bounds, and the previous M1–M4 tests.
+- `npm run validate:lessons`: all 3 sample lessons passed; all remain unreviewed.
+- `npm run lint`: passed.
+- `npm run build`: passed.
+- `npm run benchmark:tutor`: 3/3 English-to-Mandarin A1 café turns passed the automated response checks on `qwen2.5-coder:7b`. Measured provider latencies were 886 ms, 687 ms, and 674 ms (749 ms mean); measured ratios were 27%, 27%, and 32%. The first two pass only with the documented 4-point heuristic tolerance.
+- Browser check: a typed coffee order and a milk follow-up received context-aware local-model replies with generated pinyin and English support. A stubbed response also verified correction, new-word, and whiteboard rendering.
+- `git diff --check`: passed.
+
+### Manual test checklist
+
+1. Run Ollama locally with the configured model, then start Ari in development mode.
+2. Open **AI tutor**, expand **View transcript or type instead**, and ask for a coffee.
+3. Ask a follow-up about milk; confirm Ira uses the earlier order in her response.
+4. Confirm generated Chinese, pinyin, English support, and any correction or vocabulary panels appear in the transcript.
+5. Ask a safe-topic-blocked phrase such as how to say “weapon”; confirm Ari redirects without sending that message to the model.
+6. Stop Ollama and send a message; confirm Ari reports the connection error and offers **Try again** instead of inventing a reply.
+7. Run `npm run benchmark:tutor` to repeat the three-turn automated benchmark. Set `OLLAMA_MODEL` or `OLLAMA_URL` only when testing another local Ollama model or endpoint.
+
+### Still missing / known problems
+
+- The benchmark checks formatting, response length, safety keywords, and a script-based language ratio; it does not establish grammatical accuracy, cultural naturalness, or teaching quality. A qualified Mandarin speaker must review the model's replies before the language can be represented as supported instruction.
+- The benchmark model is a locally installed coder-tuned 7B model. It sometimes falls just outside the nominal A1 ratio, so the small tolerance is necessary; a different model may need a fresh benchmark and threshold review.
+- The safety check is a lightweight keyword filter, not a comprehensive content-safety system. It can produce false positives and cannot guarantee that every unsafe request or answer is caught.
+- Language-ratio measurement currently recognizes Mandarin Han characters and English letters only. Other language pairs need their own validated counting and review.
+- The learner profile and lesson context are fixed for the café prototype. Persistent memory, transcript settings, user-configurable goals, an account-backed tutor, and a production Ollama service/API are not implemented.
+- AI-generated corrections and new words are not saved into review cards, and the transcript does not yet include a **Report a mistake** action.
+- The sample Mandarin lessons remain unreviewed and are not used as authoritative tutor content.

@@ -61,12 +61,100 @@
       "uniqueItems": true
     },
     "explanation": { "type": "string" },
+    "explain_more": { "type": "string" },
     "hint": { "type": "string" },
+    "listen_text": { "type": "string", "minLength": 1 },
     "options": {
       "type": "array",
       "items": { "type": "string" },
       "minItems": 2,
       "uniqueItems": true
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "enum": [
+              "multiple_choice",
+              "listen_and_choose",
+              "listen_and_type",
+              "fill_blank",
+              "sentence_building",
+              "translate_native_to_target",
+              "translate_target_to_native",
+              "spot_mistake"
+            ]
+          }
+        },
+        "required": ["type"]
+      },
+      "then": { "properties": { "answer_key": { "type": "string" } } }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": { "enum": ["multiple_choice", "listen_and_choose", "spot_mistake"] }
+        },
+        "required": ["type"]
+      },
+      "then": {
+        "required": ["options"],
+        "properties": {
+          "answer_key": { "type": "string" },
+          "options": {
+            "type": "array",
+            "minItems": 2,
+            "uniqueItems": true,
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "listen_and_choose" } }, "required": ["type"] },
+      "then": {
+        "required": ["listen_text"],
+        "properties": { "listen_text": { "type": "string", "minLength": 1 } }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "listen_and_type" } }, "required": ["type"] },
+      "then": {
+        "required": ["listen_text"],
+        "properties": {
+          "listen_text": { "type": "string", "minLength": 1 },
+          "answer_key": { "type": "string" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "match_pairs" } }, "required": ["type"] },
+      "then": {
+        "properties": {
+          "answer_key": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "sentence_building" } }, "required": ["type"] },
+      "then": {
+        "required": ["options"],
+        "properties": {
+          "answer_key": { "type": "string" },
+          "options": {
+            "type": "array",
+            "minItems": 2,
+            "uniqueItems": true,
+            "items": { "type": "string" }
+          }
+        }
+      }
+    }
+  ]
 }

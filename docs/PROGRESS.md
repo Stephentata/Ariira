@@ -60,3 +60,44 @@
 - Guided practice and roleplay use mock replies only; exercise types, code-checked answers, and genuine tutor conversation are later milestones.
 - Session data is local to this browser and is not synced to an account.
 - No audio or images are bundled with the starter lessons.
+
+## M3 — Exercises
+
+**Status:** Implemented and verified. Exercises remain part of the unreviewed, development-only sample.
+
+### Works
+
+- The lesson player supports all nine closed exercise types from the specification: multiple choice, listen and choose, listen and type, fill in the blank, sentence building, native-to-target translation, target-to-native translation, matching pairs, and spot the mistake.
+- Correctness is determined only by the lesson's fixed `answer_key` and `accepted_variants`; the tutor does not grade exercise answers.
+- Text answers compare without case, whitespace, or punctuation differences; pair matching checks every key and value; sentence blocks must be able to form the answer.
+- Incorrect answers show the expected answer and the lesson's explanation. Learners can request more detail, view a hint, retry, and continue after a correct response.
+- Listening examples use optional browser speech synthesis of lesson text. There are no recordings, uploaded audio, or stored audio; browser playback failures are reported while text interaction remains available.
+- Exercise position is saved on the device without storing the learner's raw answer. Existing M2 saved sessions without an exercise position resume at the first exercise.
+- Exercise schema conditions validate the structured fields required by listening, choice, matching, and sentence-building exercises.
+- The lesson remains `reviewed: false` and is only available in development mode with an explicit unreviewed-content warning.
+
+### Verification
+
+- `npm test`: 19 tests passed, covering schema validation, all nine exercise types, fixed-key answer checks, accepted variants, incomplete or extra matching pairs, invalid exercise data, session persistence, and M2 session migration.
+- `npm run validate:lessons`: all 3 lesson files passed; all remain unreviewed.
+- `npm run lint`: passed.
+- `npm run build`: passed.
+- Manual browser check: wrong multiple-choice answer displayed the expected answer and explanation; **Explain more** opened the lesson detail; correct answer advanced to the second, listening exercise.
+- `git diff --check`: passed.
+
+### Manual test checklist
+
+1. In development mode, open **Open text lesson** from Home and confirm the unreviewed-content warning.
+2. Advance to **A little guided practice**.
+3. Choose an incorrect option; confirm the answer and explanation appear, then open **Explain more**.
+4. Retry with the correct choice and choose **Next exercise**.
+5. Use **Hear prompt** on the listening exercise; if browser speech is unavailable, confirm a clear notice appears and the text controls still work.
+6. Try each exercise by following its prompt; verify a wrong response can be retried and the lesson only advances after a correct answer or an explicit stage skip.
+7. Leave and reopen the player during practice; confirm the exercise position resumes without any typed answer being restored.
+
+### Still missing / known problems
+
+- Qualified human review is required before any Mandarin example is used as instruction.
+- Listening playback depends on browser-installed voices; it is not a pronunciation assessment or recorded model audio.
+- The checker does not yet implement AI-evaluated open answers, spoken learner responses, or broader exercise types 10–13.
+- Exercise results do not yet affect learner mastery or the vocabulary review queue.

@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import starterLesson from '../data/lessons/zh-a1-u01-l01.json'
+import ExercisePlayer from './ExercisePlayer'
+import { isClosedExercise, type ClosedExercise } from './exercise-checker.js'
 import {
   advanceLessonSession,
   createLessonSession,
@@ -22,6 +24,19 @@ type WhiteboardCard =
   | { id: string; type: 'summary_card'; title: string; takeaways: string[] }
 type Props = { onExit: () => void }
 type Turn = { role: 'learner' | 'ira'; text: string }
+
+function getClosedExercises(): ClosedExercise[] {
+  const serialized: unknown = JSON.parse(JSON.stringify(starterLesson.exercises))
+  if (!Array.isArray(serialized)) throw new Error('The lesson exercises must be a list.')
+  return serialized.map((exercise, index) => {
+    if (!isClosedExercise(exercise)) {
+      throw new Error(`Exercise ${index + 1} is invalid or is not a code-checked exercise.`)
+    }
+    return exercise
+  })
+}
+
+const closedExercises = getClosedExercises()
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -199,7 +214,6 @@ function Whiteboard({ card }: { card: WhiteboardCard }) {
 
 function stagePrompt(stageId: LessonStageId) {
   if (stageId === 'warmup') return 'Before we begin, how would you greet someone in Mandarin? A guess is welcome.'
-  if (stageId === 'practice') return 'Try writing a short greeting or farewell using one of the words on the whiteboard.'
   if (stageId === 'roleplay') return 'Imagine meeting someone new. Write a greeting you would use to start.'
   return ''
 }
@@ -212,6 +226,7 @@ export default function LessonPlayer({ onExit }: Props) {
   const [turns, setTurns] = useState<Turn[]>([])
   const currentStage = LESSON_STAGES[session.stageIndex]
   const completedStages = session.status === 'completed' ? LESSON_STAGES.length : session.stageIndex
+  const practiceComplete = session.exerciseIndex >= closedExercises.length
 
   function changeStage(nextSession: LessonSession) {
     try {
@@ -223,6 +238,17 @@ export default function LessonPlayer({ onExit }: Props) {
     setSession(nextSession)
     setLearnerInput('')
     setTurns([])
+  }
+
+  function completeExercise() {
+    const nextSession = { ...session, exerciseIndex: session.exerciseIndex + 1 }
+    try {
+      saveLessonSession(window.localStorage, nextSession)
+      setStorageError('')
+    } catch (error) {
+      setStorageError(error instanceof Error ? error.message : 'Could not save lesson progress on this device.')
+    }
+    setSession(nextSession)
   }
 
   function sendToMockTutor(event: FormEvent<HTMLFormElement>) {
@@ -239,13 +265,13 @@ export default function LessonPlayer({ onExit }: Props) {
     changeStage(createLessonSession(starterLesson.id))
   }
 
-  const showConversation = currentStage.id === 'warmup' || currentStage.id === 'practice' || currentStage.id === 'roleplay'
+  const showConversation = currentStage.id === 'warmup' || currentStage.id === 'roleplay'
   const stageTitle = currentStage.id === 'warmup'
     ? 'Let’s wake up a few words'
     : currentStage.id === 'teach'
       ? 'A couple of useful words'
       : currentStage.id === 'practice'
-        ? 'Try it in your own words'
+      ? 'A little guided practice'
         : currentStage.id === 'roleplay'
           ? starterLesson.roleplay.title
           : currentStage.id === 'recap'
@@ -268,7 +294,7 @@ export default function LessonPlayer({ onExit }: Props) {
         <div>
           <p className="eyebrow">TEXT LESSON · ENGLISH TO MANDARIN · A1</p>
           <h1>{starterLesson.title}</h1>
-          <p>Practice the lesson flow with Ira. This prototype uses predictable mock replies and never grades your answers.</p>
+          <p>Practice the lesson flow with Ira. Warm-up and roleplay replies are mocked; exercise answers use the lesson answer key.</p>
         </div>
         <span className="lesson-duration"><span aria-hidden="true">◷</span> 10 min</span>
       </header>
@@ -312,19 +338,35 @@ export default function LessonPlayer({ onExit }: Props) {
               </div>
               {currentStage.id === 'warmup' && <p className="lesson-stage-description">Start with what you remember. Ira will offer encouragement, not a score.</p>}
               {currentStage.id === 'teach' && <p className="lesson-stage-description">Read the lesson cards at your own pace. They are loaded from the sample lesson data.</p>}
-              {currentStage.id === 'practice' && <p className="lesson-stage-description">{stagePrompt(currentStage.id)}</p>}
+              {currentStage.id === 'practice' && <p className="lesson-stage-description">Answer key and accepted variants from the lesson data check your answers. Ira does not decide correctness.</p>}
               {currentStage.id === 'roleplay' && <p className="lesson-stage-description">{starterLesson.roleplay.goal}</p>}
               {currentStage.id === 'recap' && (
                 <div className="lesson-recap">
                   <p>You moved through {completedStages} of {LESSON_STAGES.length} stages in this preview.</p>
                   <p>Lesson objectives: {starterLesson.objectives.join(', ')}.</p>
-                  <p>No answers were scored, and no learning history was changed.</p>
+                  <p>Exercise answers were checked, but no learning history or mastery was changed.</p>
                 </div>
               )}
               {currentStage.id === 'save' && (
                 <div className="lesson-save-copy">
                   <p>Finish this practice preview to save your current stage on this device.</p>
                   <p>Saving here does not add words to a real review deck or change mastery.</p>
+                </div>
+              )}
+
+              {currentStage.id === 'practice' && !practiceComplete && (
+                <ExercisePlayer
+                  key={closedExercises[session.exerciseIndex].id}
+                  exercise={closedExercises[session.exerciseIndex]}
+                  index={session.exerciseIndex}
+                  total={closedExercises.length}
+                  onComplete={completeExercise}
+                />
+              )}
+              {currentStage.id === 'practice' && practiceComplete && (
+                <div className="lesson-practice-complete" role="status">
+                  <strong>Practice complete</strong>
+                  <p>You finished all {closedExercises.length} code-checked exercises. The answer key came from the lesson data.</p>
                 </div>
               )}
 
@@ -374,7 +416,7 @@ export default function LessonPlayer({ onExit }: Props) {
                   ? <div className="lesson-board-note"><span>TRY THIS SCENARIO</span><strong>{starterLesson.roleplay.title}</strong><p>{starterLesson.roleplay.goal}</p></div>
                   : currentStage.id === 'recap'
                     ? <div className="lesson-board-note"><span>OBJECTIVES</span><ul>{starterLesson.objectives.map((objective) => <li key={objective}>{objective.replaceAll('-', ' ')}</li>)}</ul></div>
-                    : <div className="lesson-board-note"><span>LESSON FLOW</span><strong>{currentStage.label}</strong><p>{currentStage.id === 'warmup' ? 'Share what you already remember.' : currentStage.id === 'practice' ? 'Try a phrase without worrying about mistakes.' : 'Complete the stages at your own pace.'}</p></div>}
+                    : <div className="lesson-board-note"><span>LESSON FLOW</span><strong>{currentStage.label}</strong><p>{currentStage.id === 'warmup' ? 'Share what you already remember.' : currentStage.id === 'practice' ? 'Use the lesson answer key to check each exercise.' : 'Complete the stages at your own pace.'}</p></div>}
               {currentStage.id !== 'teach' && <p className="lesson-board-disclaimer">Cards are structured from lesson data; this sample has not been reviewed.</p>}
             </aside>
           </div>
@@ -384,8 +426,14 @@ export default function LessonPlayer({ onExit }: Props) {
               <button className="button button-outline" type="button" onClick={() => changeStage(repeatLessonStage(session))}>Repeat this stage</button>
               <button className="lesson-skip-button" type="button" onClick={() => changeStage(skipLessonStage(session))}>Skip this stage</button>
             </div>
-            <button className="button button-dark" type="button" onClick={() => changeStage(advanceLessonSession(session))}>
-              {currentStage.id === 'save' ? 'Save & finish' : 'Next step'} <span aria-hidden="true">→</span>
+            <button
+              className="button button-dark"
+              type="button"
+              onClick={() => changeStage(advanceLessonSession(session))}
+              disabled={currentStage.id === 'practice' && !practiceComplete}
+              title={currentStage.id === 'practice' && !practiceComplete ? 'Complete or skip the exercises before continuing.' : undefined}
+            >
+              {currentStage.id === 'save' ? 'Save & finish' : currentStage.id === 'practice' && !practiceComplete ? 'Finish the exercises first' : 'Next step'} <span aria-hidden="true">→</span>
             </button>
           </footer>
         </>

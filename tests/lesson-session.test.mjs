@@ -26,7 +26,7 @@ test('completes the full text lesson using predictable mock tutor replies', () =
 
   for (const stage of LESSON_STAGES) {
     assert.equal(LESSON_STAGES[session.stageIndex].id, stage.id)
-    if (stage.id === 'warmup' || stage.id === 'practice' || stage.id === 'roleplay') {
+    if (stage.id === 'warmup' || stage.id === 'roleplay') {
       assert.equal(typeof createMockTutorReply(stage.id, '你好'), 'string')
     }
     session = advanceLessonSession(session)
@@ -50,12 +50,31 @@ test('can skip and repeat a stage without losing the active session', () => {
 
 test('saves and resumes an active session at its current stage', () => {
   const storage = createMemoryStorage()
-  const expected = advanceLessonSession(createLessonSession('zh-a1-u01-l01'))
+  const expected = {
+    ...advanceLessonSession(createLessonSession('zh-a1-u01-l01')),
+    exerciseIndex: 2,
+  }
 
   saveLessonSession(storage, expected)
 
   assert.deepEqual(loadLessonSession(storage, 'zh-a1-u01-l01'), expected)
   assert.equal(loadLessonSession(storage, 'zh-a1-u01-l02'), null)
+})
+
+test('upgrades a saved M2 session with no exercise position', () => {
+  const storage = createMemoryStorage()
+  const oldSession = {
+    lessonId: 'zh-a1-u01-l01',
+    stageIndex: 2,
+    status: 'active',
+    skippedStages: [],
+  }
+  storage.setItem('ari-lesson-session:zh-a1-u01-l01', JSON.stringify(oldSession))
+
+  assert.deepEqual(loadLessonSession(storage, 'zh-a1-u01-l01'), {
+    ...oldSession,
+    exerciseIndex: 0,
+  })
 })
 
 test('reports damaged saved progress instead of silently resetting it', () => {
@@ -68,11 +87,12 @@ test('reports damaged saved progress instead of silently resetting it', () => {
   )
 })
 
-test('mock tutor requires input and does not grade answers', () => {
+test('mock tutor requires input and only responds during conversation stages', () => {
   assert.throws(() => createMockTutorReply('warmup', '  '), /Write a response/)
-  const reply = createMockTutorReply('practice', 'not an answer key')
-  assert.match(reply, /does not score answers/)
+  assert.match(createMockTutorReply('warmup', '你好'), /Thanks for giving that a try/)
+  assert.match(createMockTutorReply('roleplay', '你好'), /conversation/)
   assert.throws(() => createMockTutorReply('teach', 'hello'), /does not support/)
+  assert.throws(() => createMockTutorReply('practice', 'hello'), /does not support/)
 })
 
 test('only an active session can advance or skip', () => {

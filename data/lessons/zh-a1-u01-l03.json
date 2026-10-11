@@ -55,10 +55,11 @@
       "objective_id": "say-home-country",
       "difficulty": 2,
       "prompt": "Build the sentence: I am British.",
-      "answer_key": ["我", "是", "英国人"],
+      "answer_key": "我是英国人。",
       "accepted_variants": [],
       "explanation": "Use 我是 before the nationality.",
-      "hint": "Start with 我."
+      "hint": "Start with 我.",
+      "options": ["英国人", "我", "是", "。"]
     }
   ],
   "roleplay": {

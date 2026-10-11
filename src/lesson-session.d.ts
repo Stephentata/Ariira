@@ -3,6 +3,7 @@ export type LessonStageId = 'warmup' | 'teach' | 'practice' | 'roleplay' | 'reca
 export type LessonSession = {
   lessonId: string
   stageIndex: number
+  exerciseIndex: number
   status: 'active' | 'completed'
   skippedStages: number[]
 }

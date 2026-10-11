@@ -1,7 +1,7 @@
-import { useState, type ReactNode } from 'react'
-import LessonPlayer from './LessonPlayer'
-import lessonPreview from '../data/lessons/zh-a1-u01-l01.json'
+import { lazy, Suspense, useState, type ReactNode } from 'react'
 import './App.css'
+
+const LessonPlayer = import.meta.env.DEV ? lazy(() => import('./LessonPlayer')) : null
 
 type Page = 'home' | 'lesson' | 'tutor' | 'translate' | 'vocabulary' | 'progress' | 'settings'
 type IconName =
@@ -104,7 +104,7 @@ const vocabulary = [
 ]
 
 function App() {
-  const canOpenLessonPreview = import.meta.env.DEV && lessonPreview.reviewed === false
+  const canOpenLessonPreview = import.meta.env.DEV
   const [page, setPage] = useState<Page>('home')
   const [sourceCode, setSourceCode] = useState('en')
   const [targetCode, setTargetCode] = useState('zh')
@@ -311,7 +311,11 @@ function App() {
           </div>
         )}
 
-        {page === 'lesson' && canOpenLessonPreview && <LessonPlayer onExit={() => setPage('home')} />}
+        {page === 'lesson' && canOpenLessonPreview && LessonPlayer && (
+          <Suspense fallback={<div className="page-content">Opening the text lesson...</div>}>
+            <LessonPlayer onExit={() => setPage('home')} />
+          </Suspense>
+        )}
 
         {page === 'translate' && (
           <div className="page-content subpage-content">

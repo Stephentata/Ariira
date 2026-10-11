@@ -15,6 +15,7 @@ export function createLessonSession(lessonId) {
   return {
     lessonId,
     stageIndex: 0,
+    exerciseIndex: 0,
     status: 'active',
     skippedStages: [],
   }
@@ -28,6 +29,7 @@ export function isLessonSession(value) {
     Number.isInteger(value.stageIndex) &&
     value.stageIndex >= 0 &&
     value.stageIndex < LESSON_STAGES.length &&
+    (value.exerciseIndex === undefined || (Number.isInteger(value.exerciseIndex) && value.exerciseIndex >= 0)) &&
     (value.status === 'active' || value.status === 'completed') &&
     Array.isArray(value.skippedStages) &&
     value.skippedStages.every((index) => Number.isInteger(index) && index >= 0 && index < LESSON_STAGES.length)
@@ -81,7 +83,7 @@ export function loadLessonSession(storage, lessonId) {
   if (!isLessonSession(parsed) || parsed.lessonId !== lessonId) {
     throw new Error('Saved lesson progress is invalid. Start a new lesson to replace it.')
   }
-  return parsed
+  return { ...parsed, exerciseIndex: parsed.exerciseIndex ?? 0 }
 }
 
 export function saveLessonSession(storage, session) {
@@ -98,7 +100,6 @@ export function createMockTutorReply(stageId, learnerText) {
 
   const replies = {
     warmup: 'Thanks for giving that a try. We’ll explore the words together on the whiteboard.',
-    practice: 'Nice effort. Keep experimenting with the lesson phrase; this preview does not score answers.',
     roleplay: 'I’m following along. Let’s keep the conversation going one small phrase at a time.',
   }
   const reply = replies[stageId]

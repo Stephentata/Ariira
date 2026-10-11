@@ -2,6 +2,7 @@ import { lazy, Suspense, useState, type ReactNode } from 'react'
 import './App.css'
 
 const LessonPlayer = import.meta.env.DEV ? lazy(() => import('./LessonPlayer')) : null
+const ReviewDeck = import.meta.env.DEV ? lazy(() => import('./ReviewDeck')) : null
 
 type Page = 'home' | 'lesson' | 'tutor' | 'translate' | 'vocabulary' | 'progress' | 'settings'
 type IconName =
@@ -95,13 +96,6 @@ const samples: Record<string, string> = {
   'thank you|ja': 'ありがとうございます！',
   'where is the station?|ja': '駅はどこですか？',
 }
-
-const vocabulary = [
-  { word: '你好', roman: 'nǐ hǎo', meaning: 'Hello', tag: 'Greetings', color: 'peach' },
-  { word: '谢谢', roman: 'xiè xie', meaning: 'Thank you', tag: 'Everyday', color: 'lavender' },
-  { word: '请', roman: 'qǐng', meaning: 'Please', tag: 'Everyday', color: 'mint' },
-  { word: '再见', roman: 'zài jiàn', meaning: 'Goodbye', tag: 'Greetings', color: 'blue' },
-]
 
 function App() {
   const canOpenLessonPreview = import.meta.env.DEV
@@ -296,14 +290,15 @@ function App() {
                     <span className="practice-icon practice-translate"><Icon name="translate" size={19} /></span><span className="practice-label"><strong>Try a translation</strong><small>Find the words for what you mean</small></span><Icon name="arrow" size={17} />
                   </button>
                   <button className="practice-option" onClick={() => setPage('vocabulary')}>
-                    <span className="practice-icon practice-review"><Icon name="book" size={19} /></span><span className="practice-label"><strong>Review your words</strong><small>4 words are ready to revisit</small></span><Icon name="arrow" size={17} />
+                    <span className="practice-icon practice-review"><Icon name="book" size={19} /></span><span className="practice-label"><strong>Review your words</strong><small>Practise words when they are due</small></span><Icon name="arrow" size={17} />
                   </button>
                 </div>
               </div>
               <div className="panel words-panel">
                 <div className="section-heading"><div><p className="eyebrow">A FEW GOOD WORDS</p><h3>Recently learned</h3></div><button className="text-button" onClick={() => setPage('vocabulary')}>View all <Icon name="arrow" size={15} /></button></div>
                 <div className="word-list">
-                  {vocabulary.slice(0, 3).map((item) => <div className="word-row" key={item.word}><span className={`word-badge ${item.color}`}>{item.word}</span><span className="word-detail"><strong>{item.meaning}</strong><small>{item.roman}</small></span><button className="icon-button word-play" onClick={() => speakWord(item.word)} aria-label={`Play pronunciation for ${item.meaning}`}><Icon name="volume" size={17} /></button></div>)}
+                  <p>Your reviewed curriculum words will appear here. Open your review garden to practise words that are due.</p>
+                  <button className="text-button" onClick={() => setPage('vocabulary')}>Open review garden <Icon name="arrow" size={15} /></button>
                 </div>
               </div>
             </section>
@@ -360,11 +355,10 @@ function App() {
           </div>
         )}
 
-        {page === 'vocabulary' && (
-          <div className="page-content subpage-content">
-            <div className="subpage-intro"><p className="eyebrow">WORDS TO TAKE WITH YOU</p><h1>Your little word garden.</h1><p>Every new word is another way to connect.</p></div>
-            <section className="vocabulary-card"><div className="vocab-toolbar"><div className="vocab-count"><strong>128</strong><span>words learned</span></div><button className="button button-outline" onClick={() => setTranslationMessage('Saving new words will be available when your account is connected.')}><Icon name="plus" size={17} /> Add a word</button></div><div className="vocab-table-heading"><span>WORD</span><span>MEANING</span><span>COLLECTION</span><span /></div>{vocabulary.map((item) => <div className="vocab-row" key={item.word}><div className="vocab-word"><span className={`word-badge ${item.color}`}>{item.word}</span><span>{item.roman}</span></div><strong>{item.meaning}</strong><span className="tag">{item.tag}</span><button className="icon-button" aria-label={`Hear ${item.word}`} onClick={() => speakWord(item.word)}><Icon name="volume" size={17} /></button></div>)}{translationMessage && <p className="inline-notice">{translationMessage}</p>}</section>
-          </div>
+        {page === 'vocabulary' && canOpenLessonPreview && ReviewDeck && (
+          <Suspense fallback={<div className="page-content">Opening your review deck...</div>}>
+            <ReviewDeck />
+          </Suspense>
         )}
 
         {page === 'progress' && (

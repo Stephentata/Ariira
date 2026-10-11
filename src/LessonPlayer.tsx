@@ -1,7 +1,8 @@
-import { useState, type FormEvent } from 'react'
+import { lazy, Suspense, useState, type FormEvent } from 'react'
 import starterLesson from '../data/lessons/zh-a1-u01-l01.json'
 import ExercisePlayer from './ExercisePlayer'
 import { isClosedExercise, type ClosedExercise } from './exercise-checker.js'
+import { addLessonVocabularyToReviewDeck } from './review-scheduler.js'
 import {
   advanceLessonSession,
   createLessonSession,
@@ -24,6 +25,7 @@ type WhiteboardCard =
   | { id: string; type: 'summary_card'; title: string; takeaways: string[] }
 type Props = { onExit: () => void }
 type Turn = { role: 'learner' | 'ira'; text: string }
+const WarmupReview = lazy(() => import('./ReviewDeck').then((module) => ({ default: module.WarmupReview })))
 
 function getClosedExercises(): ClosedExercise[] {
   const serialized: unknown = JSON.parse(JSON.stringify(starterLesson.exercises))
@@ -129,9 +131,18 @@ const whiteboardCards = getWhiteboardCards()
 
 function getInitialSession(): { session: LessonSession; error: string } {
   try {
+    const session = loadLessonSession(window.localStorage, starterLesson.id) ?? createLessonSession(starterLesson.id)
+    let error = ''
+    if (LESSON_STAGES[session.stageIndex].id === 'teach') {
+      try {
+        addLessonVocabularyToReviewDeck(window.localStorage, starterLesson.id, starterLesson.vocabulary)
+      } catch (reviewError) {
+        error = reviewError instanceof Error ? reviewError.message : 'Could not add lesson words to your review deck.'
+      }
+    }
     return {
-      session: loadLessonSession(window.localStorage, starterLesson.id) ?? createLessonSession(starterLesson.id),
-      error: '',
+      session,
+      error,
     }
   } catch (error) {
     return {
@@ -229,12 +240,20 @@ export default function LessonPlayer({ onExit }: Props) {
   const practiceComplete = session.exerciseIndex >= closedExercises.length
 
   function changeStage(nextSession: LessonSession) {
+    let errorMessage = ''
     try {
       saveLessonSession(window.localStorage, nextSession)
-      setStorageError('')
     } catch (error) {
-      setStorageError(error instanceof Error ? error.message : 'Could not save lesson progress on this device.')
+      errorMessage = error instanceof Error ? error.message : 'Could not save lesson progress on this device.'
     }
+    if (LESSON_STAGES[nextSession.stageIndex].id === 'teach') {
+      try {
+        addLessonVocabularyToReviewDeck(window.localStorage, starterLesson.id, starterLesson.vocabulary)
+      } catch (error) {
+        errorMessage = error instanceof Error ? error.message : 'Could not add lesson words to your review deck.'
+      }
+    }
+    setStorageError(errorMessage)
     setSession(nextSession)
     setLearnerInput('')
     setTurns([])
@@ -321,7 +340,7 @@ export default function LessonPlayer({ onExit }: Props) {
           <span className="lesson-complete-icon" aria-hidden="true">✓</span>
           <p className="eyebrow">SESSION COMPLETE</p>
           <h2>That’s a lovely little step.</h2>
-          <p>Your progress is saved on this device. The sample lesson remains unreviewed and does not update real learning progress.</p>
+          <p>This sample remains unreviewed. Your review scheduling is saved on this device but does not count as verified language mastery.</p>
           {session.skippedStages.length > 0 && <p>You skipped {session.skippedStages.length} stage{session.skippedStages.length === 1 ? '' : 's'}; you can revisit them when you restart.</p>}
           <div className="lesson-action-row">
             <button className="button button-outline" type="button" onClick={onExit}>Back to home</button>
@@ -336,7 +355,7 @@ export default function LessonPlayer({ onExit }: Props) {
                 <div><span className="lesson-stage-kicker">STAGE {session.stageIndex + 1} OF {LESSON_STAGES.length}</span><h2 id="lesson-stage-title">{stageTitle}</h2></div>
                 {currentStage.minutes > 0 && <span className="lesson-stage-time">~{currentStage.minutes} min</span>}
               </div>
-              {currentStage.id === 'warmup' && <p className="lesson-stage-description">Start with what you remember. Ira will offer encouragement, not a score.</p>}
+              {currentStage.id === 'warmup' && <p className="lesson-stage-description">Recall a few words that are due for review, then warm up with Ira.</p>}
               {currentStage.id === 'teach' && <p className="lesson-stage-description">Read the lesson cards at your own pace. They are loaded from the sample lesson data.</p>}
               {currentStage.id === 'practice' && <p className="lesson-stage-description">Answer key and accepted variants from the lesson data check your answers. Ira does not decide correctness.</p>}
               {currentStage.id === 'roleplay' && <p className="lesson-stage-description">{starterLesson.roleplay.goal}</p>}
@@ -350,7 +369,7 @@ export default function LessonPlayer({ onExit }: Props) {
               {currentStage.id === 'save' && (
                 <div className="lesson-save-copy">
                   <p>Finish this practice preview to save your current stage on this device.</p>
-                  <p>Saving here does not add words to a real review deck or change mastery.</p>
+                  <p>Words introduced on the whiteboard have been added to your local review deck. Review ratings do not count as verified language mastery.</p>
                 </div>
               )}
 
@@ -368,6 +387,11 @@ export default function LessonPlayer({ onExit }: Props) {
                   <strong>Practice complete</strong>
                   <p>You finished all {closedExercises.length} code-checked exercises. The answer key came from the lesson data.</p>
                 </div>
+              )}
+              {currentStage.id === 'warmup' && (
+                <Suspense fallback={<div className="review-empty">Loading your due-word warm-up…</div>}>
+                  <WarmupReview />
+                </Suspense>
               )}
 
               {showConversation && (

@@ -100,4 +100,45 @@
 - Qualified human review is required before any Mandarin example is used as instruction.
 - Listening playback depends on browser-installed voices; it is not a pronunciation assessment or recorded model audio.
 - The checker does not yet implement AI-evaluated open answers, spoken learner responses, or broader exercise types 10–13.
-- Exercise results do not yet affect learner mastery or the vocabulary review queue.
+- Exercise results do not yet update mastery or reprioritize the review queue; review scheduling currently uses self-ratings.
+
+## M4 — Vocabulary and review
+
+**Status:** Implemented and verified in the local development preview. Review data is device-local; lesson-derived Mandarin remains unreviewed and development-only.
+
+### Works
+
+- Completing the lesson whiteboard stage adds its vocabulary to the local review deck once; skipping the teaching stage does not add unseen words.
+- Review cards persist their due date, interval, ease, repetition count, lapse count, last rating, state, and source in browser storage.
+- The SM-2-style scheduler supports Again, Hard, Good, and Easy ratings, with a short Again retry, increasing intervals, and a minimum ease factor.
+- A local-calendar daily limit prevents more than 20 cards from being rated in one day, including across review-page visits. Review timestamps are stored with the cards, and remaining due cards stay queued for another day.
+- The Vocabulary page includes flashcards, listen-and-type, spoken-word practice, and use-in-a-sentence modes. Browser speech features explain availability and privacy limits; learner audio is not stored by Ari.
+- The lesson warm-up presents up to five due words from the same capped review queue. When no card is due, it clearly allows the lesson to continue without a review.
+- Damaged deck or daily-limit data is reported; it is not silently reset or presented as an empty, successful review.
+- Sample vocabulary and UI are loaded only in development. The words remain visibly marked unreviewed and are not included in the production JavaScript bundle.
+
+### Verification
+
+- `npm test`: 29 tests passed, including scheduling intervals, lapsed cards, duplicate-safe lesson vocabulary addition, daily-cap persistence/reset, saved-card migration, malformed saved progress, and the previous M1–M3 tests.
+- `npm run validate:lessons`: all 3 lesson files passed; all remain unreviewed.
+- `npm run lint`: passed.
+- `npm run build`: passed.
+- Manual browser check: advancing from the whiteboard added two lesson words to the deck; the review page showed both as due; rating one Good scheduled it for later; the next lesson warm-up offered the remaining due word.
+- `git diff --check`: passed.
+
+### Manual test checklist
+
+1. Open a lesson and check that its warm-up does not show words you have not learned yet.
+2. Advance to the whiteboard, then continue to practice; confirm the lesson vocabulary is added to the Vocabulary page.
+3. Reveal a flashcard meaning, rate recall, and confirm that the due queue advances.
+4. Try Listen & type, Speak the word, and Use in a sentence; confirm the prompt and browser capability or privacy notice for each.
+5. Rate up to 20 cards, then confirm the app reports the daily limit and leaves remaining cards for tomorrow.
+6. Reopen the app on the same day and confirm the daily count and scheduled card dates persist.
+7. Confirm the sample-content warning remains visible and the sample words do not appear in a production build.
+
+### Still missing / known problems
+
+- Mandarin sample words remain unreviewed; they must not be used as trusted instruction.
+- Speech playback and speech recognition depend on browser voices and speech services. Recognition is approximate and may send audio according to the browser provider's privacy policy; Ari does not store learner recordings.
+- The local deck currently adds vocabulary from the lesson whiteboard stage. Words saved from tutor conversations or the translator, account sync, and an FSRS scheduler are not implemented.
+- Incorrect exercise answers and tutor corrections do not yet reprioritize review cards.

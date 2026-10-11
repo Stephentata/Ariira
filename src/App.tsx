@@ -1,7 +1,9 @@
 import { useState, type ReactNode } from 'react'
+import LessonPlayer from './LessonPlayer'
+import lessonPreview from '../data/lessons/zh-a1-u01-l01.json'
 import './App.css'
 
-type Page = 'home' | 'tutor' | 'translate' | 'vocabulary' | 'progress' | 'settings'
+type Page = 'home' | 'lesson' | 'tutor' | 'translate' | 'vocabulary' | 'progress' | 'settings'
 type IconName =
   | 'home'
   | 'sparkles'
@@ -102,6 +104,7 @@ const vocabulary = [
 ]
 
 function App() {
+  const canOpenLessonPreview = import.meta.env.DEV && lessonPreview.reviewed === false
   const [page, setPage] = useState<Page>('home')
   const [sourceCode, setSourceCode] = useState('en')
   const [targetCode, setTargetCode] = useState('zh')
@@ -232,12 +235,15 @@ function App() {
 
             <section className="learning-card">
               <div className="learning-copy">
-                <div className="lesson-kicker"><span className="lesson-dot" /> YOUR NEXT LESSON <span className="lesson-time"><Icon name="clock" size={14} /> 8 MIN</span></div>
-                <h2>Order like a local</h2>
-                <p>Practice ordering your favorite drink at a neighborhood café.</p>
+                <div className="lesson-kicker"><span className="lesson-dot" /> YOUR NEXT LESSON <span className="lesson-time"><Icon name="clock" size={14} /> 10 MIN</span></div>
+                <h2>Your next text lesson</h2>
+                <p>Practise a few Mandarin greetings in a short, guided lesson with Ira.</p>
                 <div className="lesson-meta"><span className="language-chip"><span>🇨🇳</span> Mandarin</span><span className="level-chip">BEGINNER · A1</span></div>
-                <button className="button button-dark" onClick={() => { setPage('tutor'); setSessionStarted(true) }}>
-                  {sessionStarted ? 'Continue practice' : 'Start learning'} <Icon name="arrow" size={17} />
+                {canOpenLessonPreview && <button className="button button-dark" onClick={() => setPage('lesson')}>
+                  Open text lesson <Icon name="arrow" size={17} />
+                </button>}
+                <button className="lesson-voice-link" onClick={() => { setPage('tutor'); setSessionStarted(true) }}>
+                  Prefer a conversation? Talk with Ira <Icon name="arrow" size={15} />
                 </button>
               </div>
               <div className="lesson-art" aria-hidden="true">
@@ -304,6 +310,8 @@ function App() {
             <footer className="page-footer"><span>A calm little corner for your language journey.</span><span>Made for curious minds <span className="footer-heart">♥</span></span></footer>
           </div>
         )}
+
+        {page === 'lesson' && canOpenLessonPreview && <LessonPlayer onExit={() => setPage('home')} />}
 
         {page === 'translate' && (
           <div className="page-content subpage-content">

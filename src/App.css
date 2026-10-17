@@ -7938,27 +7938,22 @@ p {
   }
 
   .home-session-shell .topbar-actions {
-    gap: 9px;
+    gap: 8px;
   }
 
   .home-session-shell .topbar .streak-pill {
-    width: 35px;
-    height: 35px;
-    justify-content: center;
-    padding: 0;
-    border-radius: 50%;
-    font-size: 0;
-  }
-
-  .home-session-shell .topbar .streak-pill span {
-    font-size: 14px;
+    display: none;
   }
 
   .home-session-shell .topbar .theme-switch {
-    width: 35px;
-    height: 35px;
+    width: 42px;
+    height: 42px;
     justify-content: center;
     padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface);
+    color: var(--accent-deep);
   }
 
   .home-session-shell .topbar .theme-switch span,
@@ -8011,13 +8006,34 @@ p {
   }
 
   .home-session-shell .topbar-actions .session-menu summary {
-    min-height: 34px;
-    padding: 0 12px;
+    min-height: 42px;
+    gap: 8px;
+    padding: 0 13px;
     border: 1px solid var(--line);
-    border-radius: 10px;
+    border-radius: 14px;
     background: var(--surface);
     color: var(--text-main);
-    font-size: 11px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .home-session-shell .topbar-actions .session-menu summary::before {
+    width: 14px;
+    height: 12px;
+    flex: 0 0 14px;
+    background: linear-gradient(
+      to bottom,
+      currentColor 0 2px,
+      transparent 2px 5px,
+      currentColor 5px 7px,
+      transparent 7px 10px,
+      currentColor 10px 12px
+    );
+    content: '';
+  }
+
+  .home-session-shell .topbar-actions .session-menu summary::after {
+    display: none;
   }
 
   .home-session-shell .voice-panel {
@@ -8043,8 +8059,12 @@ p {
 
   .home-session-shell .topbar-actions .session-menu-actions {
     z-index: 70;
+    top: calc(100% + 9px);
     right: 0;
-    min-width: 190px;
+    min-width: 205px;
+    padding: 7px;
+    border-radius: 15px;
+    box-shadow: 0 14px 36px rgb(23 53 59 / 16%);
   }
 
   .home-session-shell .voice-controls {

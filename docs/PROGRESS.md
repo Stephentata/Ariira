@@ -195,37 +195,35 @@
 
 **Status:** Implemented and verified with mocked browser speech APIs. Real microphone/audio verification remains outstanding.
 
+**Current UI:** Voice input uses tap-to-speak only. The Tap to chat / Hold to speak selector has been removed; hold-to-speak checks below document the earlier implementation and are not reachable from the app UI.
+
 ### Works
 
-- The AI tutor offers **Tap to chat** and **Hold to speak** input modes.
-- Tap mode starts a spoken lesson, listens continuously, sends finalized speech turns, speaks Ira's Mandarin reply followed by its English support, and resumes listening after playback.
-- Hold mode starts recognition while Ira is pressed, collects finalized speech, and submits it when the learner releases the button. It also supports keyboard activation and lets the learner interrupt Ira by pressing and holding while she speaks.
-- Recognition and speech synthesis are stopped when the voice session ends, the learner changes input mode, or they leave the tutor page.
-- Microphone denial, missing microphone, blocked speech service, network failure, and unsupported browser features have explicit feedback. A no-speech hold prompts the learner to try again.
+- The AI tutor uses a single tap-to-speak flow: it starts a spoken lesson, listens continuously, sends finalized speech turns, speaks Ira's Mandarin reply followed by its English support, and resumes listening after playback.
+- Recognition and speech synthesis are stopped when the voice session ends or the learner leaves the tutor page.
+- Microphone denial, missing microphone, blocked speech service, network failure, unsupported browser features, and no-speech capture have explicit feedback.
 - Voice replies show the elapsed time from starting the tutor request until its reply is ready; this measurement excludes speech playback.
 - Ari does not record or save microphone audio. The browser's speech service may process audio according to its own provider and privacy policy.
 
-### Verification
+### Historical verification
 
-- `npm test`: 36 tests passed.
+- The original two-mode implementation passed 36 tests.
 - `npm run lint`: passed.
 - `npm run build`: passed.
-- Browser simulation with mocked `SpeechRecognition`, speech synthesis, and tutor response: tap mode spoke Ira's welcome, accepted a simulated finalized turn, spoke the reply, and resumed listening. Hold mode started recognition while pressed, submitted the finalized transcript on release, spoke Ira's Mandarin reply and English support, and displayed the latency indicator.
+- Browser simulation with mocked `SpeechRecognition`, speech synthesis, and tutor response: the former tap mode spoke Ira's welcome, accepted a simulated finalized turn, spoke the reply, and resumed listening. The former hold mode started recognition while pressed, submitted the finalized transcript on release, spoke Ira's Mandarin reply and English support, and displayed the latency indicator.
 - Browser simulation of microphone permission denial displayed actionable guidance and returned the voice control to idle.
 - No real microphone audio or recorded speech was tested.
 
 ### Manual test checklist
 
 1. Use a supported browser (for example, current Chrome or Edge), allow microphone access, and start the development app with the local Ollama model available.
-2. Open **AI tutor**, choose **Tap to chat**, and start a spoken lesson. Confirm Ira speaks the welcome and then listens.
+2. Open the tutor and tap **Press to speak**. Confirm Ira speaks the welcome and then listens.
 3. Speak a short turn and pause; confirm the transcript appears, Ira replies aloud, a latency indicator appears before playback, and the listener resumes afterward.
 4. While Ira is speaking, tap the Ira button and speak to confirm interruption.
-5. Switch to **Hold to speak**, press and hold Ira while speaking, then release. Confirm the transcript is sent only after release and Ira answers aloud.
-6. Press and hold while Ira is speaking to interrupt her; confirm the next turn is sent on release.
-7. Release without speaking; confirm the no-speech prompt appears and voice capture stops.
-8. Deny microphone access (or use browser site settings to revoke it); confirm Ari explains how to restore permission.
-9. Change input mode or navigate away during a voice session; confirm recognition and speech playback stop.
-10. Expand **View transcript or type instead** and confirm the text transcript remains available alongside voice interaction.
+5. Leave a voice capture without speaking; confirm the no-speech prompt appears and capture stops.
+6. Deny microphone access (or use browser site settings to revoke it); confirm Ari explains how to restore permission.
+7. Navigate away during a voice session; confirm recognition and speech playback stop.
+8. Expand **View transcript or type instead** and confirm the text transcript remains available alongside voice interaction.
 
 ### Still missing / known problems
 
@@ -440,7 +438,7 @@
 
 - The button renders a glowing purple-blue sphere with drifting nebula colors and thin orbit rings using CSS; no character model, WebGL, or model download is required.
 - The existing tutor states drive the orb: it pulses while Ira speaks, with a small waveform, and changes ring/glow behavior while listening or thinking.
-- The microphone badge and outer circular control border have been removed; the orb remains the accessible, clickable/holdable voice control.
+- The microphone badge and outer circular control border have been removed; the orb remains the accessible, tap-responsive voice control.
 - `prefers-reduced-motion` turns off orb animation without affecting the voice controls.
 
 ### Still missing / known problems

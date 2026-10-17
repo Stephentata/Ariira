@@ -39,7 +39,7 @@ test('Pages chat function maps the Ollama-compatible request to Workers AI', asy
   })
 
   assert.equal(response.status, 200)
-  assert.equal(model, '@cf/meta/llama-3.1-8b-instruct')
+  assert.equal(model, '@cf/meta/llama-3.3-70b-instruct-fp8-fast')
   assert.deepEqual(input.messages, payload.messages)
   assert.deepEqual(input.response_format, {
     type: 'json_schema',

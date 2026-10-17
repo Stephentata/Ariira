@@ -160,7 +160,7 @@
 - Corrections, new words, and optional whiteboard cards appear in the transcript as explicitly AI-generated content. They do not change exercise answer keys or automatically enter the review deck.
 - The request includes at most the latest 16 chat messages plus the system prompt. Chat history is kept in page memory only; it is not persisted.
 - Provider success/failure logs include model and latency without logging conversation text. Invalid provider replies are reported in the UI with a retry action; there is no success-shaped fallback.
-- The Pages Function validates bounded chat input, maps the schema into Workers AI JSON mode, fixes the production model to `@cf/meta/llama-3.1-8b-instruct`, and returns errors instead of fabricating a reply.
+- The Pages Function validates bounded chat input, maps the schema into Workers AI JSON mode, uses the currently listed `@cf/meta/llama-3.3-70b-instruct-fp8-fast` model, and returns errors instead of fabricating a reply.
 
 ### Verification
 

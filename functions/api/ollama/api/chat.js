@@ -1,4 +1,4 @@
-const model = '@cf/meta/llama-3.1-8b-instruct'
+const model = '@cf/meta/llama-3.3-70b-instruct-fp8-fast'
 const maximumMessages = 30
 const maximumMessageLength = 20_000
 const maximumTotalLength = 48_000

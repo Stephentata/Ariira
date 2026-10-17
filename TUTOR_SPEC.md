@@ -256,7 +256,7 @@ For each learner and language, track:
 
 - Three strong results in a row on an objective: raise difficulty or move on.
 - Two or more failures: slow down, add a hint, re-teach with a new example, and schedule an extra review.
-- The tutor's **target-language ratio** follows the level: A1 about 30 to 50 percent target language with native-language support, A2 about 50 to 70 percent, B1 about 70 to 90 percent, B2 nearly all target language.
+- The tutor's **target-language ratio** follows the level: A0 about 20 to 60 percent target language with native-language support (a wider band for short beginner replies), A1 about 30 to 50 percent, A2 about 50 to 70 percent, B1 about 70 to 90 percent, B2 nearly all target language.
 - Vocabulary and sentence length in tutor replies must stay inside the learner's level. If the tutor uses a word above the level, it must gloss it.
 - The learner can override: "slower", "simpler", "explain in my language", "harder".
 

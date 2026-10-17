@@ -1,5 +1,5 @@
 const ratioTargets = {
-  A0: { target: 0.2, min: 0.1, max: 0.3 },
+  A0: { target: 0.3, min: 0.2, max: 0.6 },
   A1: { target: 0.4, min: 0.3, max: 0.5 },
   A2: { target: 0.6, min: 0.5, max: 0.7 },
   B1: { target: 0.8, min: 0.7, max: 0.9 },

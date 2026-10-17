@@ -23,7 +23,7 @@ const validReply = {
 }
 
 test('builds the Section 10 tutor prompt with level-based language ratios', () => {
-  assert.equal(getTargetLanguageRatio('A0'), 0.2)
+  assert.equal(getTargetLanguageRatio('A0'), 0.3)
   assert.equal(getTargetLanguageRatio('A1'), 0.4)
   assert.equal(getTargetLanguageRatio('A2'), 0.6)
   assert.equal(getTargetLanguageRatio('B1'), 0.8)
@@ -38,6 +38,10 @@ test('builds the Section 10 tutor prompt with level-based language ratios', () =
   assert.match(prompt, /about 40 percent Mandarin Chinese/)
   assert.match(prompt, /Limit corrections to two per reply/)
   assert.match(prompt, /Never claim to be human/)
+
+  const beginnerPrompt = buildTutorSystemPrompt({ ...defaultTutorProfile, level: 'A0' })
+  assert.match(beginnerPrompt, /about 30 percent Mandarin Chinese/)
+  assert.match(beginnerPrompt, /outside the 20 to 60 percent range/)
 })
 
 test('roleplay tutor prompts stay in the scenario and leave reflection and scoring to the learner', () => {
@@ -115,6 +119,25 @@ test('measures Mandarin ratio and sentence count for tutor replies', () => {
   assert.equal(getLanguageRatio('你好！Hi.'), 0.5)
   assert.equal(getTutorResponseLanguageRatio(validReply), 0.5)
   assert.equal(countTutorSentences('你好。I like coffee. 你呢？'), 3)
+})
+
+test('A0 accepts short beginner replies with concise English support', () => {
+  const replies = [
+    { ...validReply, reply_text: '你好！今天你想点什么？', native_support: 'Hi, what' },
+    { ...validReply, reply_text: '你想喝咖啡吗？', native_support: 'Want coffee?' },
+    { ...validReply, reply_text: '你好！想点咖啡吗？', native_support: 'Hello, coffee?' },
+  ]
+
+  for (const reply of replies) {
+    assert.ok(getTutorResponseLanguageRatio(reply) >= 0.34)
+    assert.ok(getTutorResponseLanguageRatio(reply) <= 0.64)
+    assert.equal(validateTutorResponse(reply, 'A0', 'zh').reply_text, reply.reply_text)
+  }
+
+  assert.throws(
+    () => validateTutorResponse({ ...validReply, reply_text: '你好。谢谢。', native_support: 'Hi.' }, 'A0', 'zh'),
+    /language-ratio check/,
+  )
 })
 
 test('validates structured corrections, new words, and schema-conforming whiteboard cards', () => {

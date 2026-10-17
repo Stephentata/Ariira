@@ -42,9 +42,10 @@ test('browser voice selection prefers the requested gender in the target languag
   ]
   assert.equal(selectBrowserSpeechVoice(voices, 'fr-FR', 'female'), voices[1])
   assert.equal(selectBrowserSpeechVoice(voices, 'fr-FR', 'male'), voices[0])
-  assert.equal(selectBrowserSpeechVoice(voices, 'de-DE', 'female'), voices[1])
+  assert.equal(selectBrowserSpeechVoice(voices, 'de-DE', 'female'), null)
+  assert.equal(selectBrowserSpeechVoice([{ name: 'Windows French', lang: 'fr-FR' }], 'fr-FR', 'male').name, 'Windows French')
   assert.equal(selectBrowserSpeechVoice([], 'fr-FR', 'female'), null)
-  assert.equal(selectBrowserSpeechVoice([{ name: 'Default Voice', lang: 'fr-FR', default: true }], 'fr-FR', 'female'), null)
+  assert.equal(selectBrowserSpeechVoice([{ name: 'Default Voice', lang: 'fr-FR', default: true }], 'fr-FR', 'female')?.name, 'Default Voice')
 })
 
 test('local playback failure falls back to browser synthesis using the selected voice and locale', async () => {
@@ -71,16 +72,72 @@ test('spoken tutor names use their supplied phonetic forms in browser fallback',
 test('local playback errors remain explicit when browser synthesis is unavailable', async () => {
   await assert.rejects(
     playSpeechAudio('Hello', 'en-US', 'female', {}),
-    /local voice service is not responding on port 3901/,
+    /speech service is not responding.*Check the server connection/,
   )
 })
 
-test('browser fallback refuses an unverified or mismatched voice', async () => {
-  const browser = createBrowserSpeech([{ name: 'Male English', lang: 'en-US', default: true }])
-  await assert.rejects(
-    playSpeechAudio('Hello', 'en-US', 'female', browser.apis),
-    /No female-sounding browser voice is available/,
-  )
+test('browser fallback prefers the target language when voice gender is not identifiable', async () => {
+  const voice = { name: 'Windows English', lang: 'en-US', default: true }
+  const browser = createBrowserSpeech([voice])
+  await playSpeechAudio('Hello', 'en-US', 'female', browser.apis)
+  assert.equal(browser.getUtterance().voice, voice)
+})
+
+test('browser fallback error includes the missing hosted speech configuration', async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    error: 'Cloudflare Workers AI is not configured. Add the AI binding to the Pages project.',
+  }), { status: 503, headers: { 'Content-Type': 'application/json' } })
+  try {
+    const browser = createBrowserSpeech([])
+    await assert.rejects(
+      playSpeechAudio('Hello', 'en-GB', 'female', browser.apis),
+      /No installed browser voice supports en-GB.*Add the AI binding to the Pages project/,
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('browser fallback waits briefly for asynchronously loaded device voices', async () => {
+  let voices = []
+  let voicesChanged
+  let utterance
+  const voice = { name: 'Windows French', lang: 'fr-FR' }
+  const synthesis = {
+    getVoices: () => voices,
+    addEventListener: (_type, listener) => { voicesChanged = listener },
+    removeEventListener: () => { voicesChanged = null },
+    speak: (item) => {
+      utterance = item
+      queueMicrotask(() => item.onend?.())
+    },
+    cancel: () => {},
+  }
+  const playback = playSpeechAudio('Bonjour !', 'fr-FR', 'female', {
+    speechSynthesis: synthesis,
+    SpeechSynthesisUtterance: FakeUtterance,
+  })
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.equal(typeof voicesChanged, 'function')
+  voices = [voice]
+  voicesChanged()
+  await playback
+  assert.equal(utterance.voice, voice)
+})
+
+test('lively and playful browser styles adjust delivery while preserving the selected voice', async () => {
+  const livelyVoice = { name: 'Windows French', lang: 'fr-FR' }
+  const livelyBrowser = createBrowserSpeech([livelyVoice])
+  await playSpeechAudio('Bonjour !', 'fr-FR', 'female', livelyBrowser.apis, { flavor: 'Lively', rate: 1 })
+  assert.equal(livelyBrowser.getUtterance().voice, livelyVoice)
+  assert.equal(livelyBrowser.getUtterance().rate, 1.06)
+  assert.equal(livelyBrowser.getUtterance().pitch, 1.08)
+
+  const playfulBrowser = createBrowserSpeech([{ name: 'Windows English', lang: 'en-GB' }])
+  await playSpeechAudio('Hello!', 'en-GB', 'male', playfulBrowser.apis, { flavor: 'Playful', rate: 1 })
+  assert.equal(playfulBrowser.getUtterance().rate, 1.05)
+  assert.equal(playfulBrowser.getUtterance().pitch, 1.07)
 })
 
 test('cancelling browser speech rejects its pending playback as an abort', async () => {

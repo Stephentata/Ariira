@@ -21,6 +21,7 @@ import { evaluatePlacementCheck, PLACEMENT_QUESTIONS, type PlacementResult } fro
 import { type RoleplayScenario } from './roleplay-scenarios.js'
 import {
   DEFAULT_SPEECH_PREFERENCES,
+  getTutorPreviewText,
   getTutorSpeechGender,
   readSpeechPreferences,
   saveSpeechPreferences,
@@ -978,11 +979,7 @@ function App() {
   async function previewTutorVoice(flavor = speechPreferences.flavor, tutorName = learnerData.settings.tutorName) {
     setVoiceError('')
     setPreviewingTutorVoice(tutorName)
-    const preview = targetCode === 'fr'
-      ? `Bonjour, je m'appelle ${tutorName}. On va apprendre en s’amusant.`
-      : targetCode === 'zh'
-        ? `你好，我是${tutorName}。我们一起轻松有趣地学习吧。`
-        : `Hello, I’m ${tutorName}. Let’s make learning ${targetLanguage.name} fun.`
+    const preview = getTutorPreviewText(targetCode)
     try {
       await playSpeechAudio(preview, targetLanguage.locale, getTutorSpeechGender(tutorName), globalThis, { flavor, rate: speechPreferences.rate })
     } catch (error) {
@@ -1923,7 +1920,7 @@ function App() {
     if (!updateLearnerSettings({ tutorName: name })) return
     updateSpeechPreferences({
       gender: getTutorSpeechGender(name),
-      flavor: name === 'Ari' ? 'Playful' : 'Airy',
+      flavor: name === 'Ari' ? 'Playful' : 'Lively',
     })
   }
 
@@ -2834,12 +2831,12 @@ function App() {
               <div className="setting-row"><span><strong>Reminder preference</strong><small>Notifications are not scheduled yet</small></span><label className="settings-theme-switch"><span>{learnerData.settings.reminderEnabled ? 'On' : 'Off'}</span><input type="checkbox" aria-label="Save a daily reminder preference" checked={learnerData.settings.reminderEnabled} onChange={(event) => updateLearnerSettings({ reminderEnabled: event.target.checked })} /></label></div>
             </section>
             <section className="settings-card speech-settings-card">
-              <div className="settings-section-intro"><p className="eyebrow">TUTOR & VOICE</p><h3>Make your tutor yours</h3><p>{learnerData.settings.tutorName} uses a {tutorVoiceGender}-sounding voice. Voice flavour selection is best-effort and depends on voices available on this device.</p></div>
-              <div className="setting-row"><span><strong>Tutor voice</strong><small>Ari uses a male voice; Ira uses a female voice</small></span><span className="level-chip">{learnerData.settings.tutorName} · {tutorVoiceGender}</span></div>
-              <div className="speech-gender-choices" role="group" aria-label="Choose tutor and voice gender">
+              <div className="settings-section-intro"><p className="eyebrow">TUTOR & VOICE</p><h3>Make your tutor yours</h3><p>Cloud speech uses the same MeloTTS voice for Ari and Ira; its hosted API does not offer a voice-gender selector. Browser fallback depends on voices installed on this device.</p></div>
+              <div className="setting-row"><span><strong>Tutor voice</strong><small>Cloud speech currently uses one voice for both tutors</small></span><span className="level-chip">MeloTTS · {targetLanguage.name}</span></div>
+              <div className="speech-gender-choices" role="group" aria-label="Choose tutor and voice preference">
                 {([
-                  { tutor: 'Ari' as const, gender: 'male', label: 'Male · Ari' },
-                  { tutor: 'Ira' as const, gender: 'female', label: 'Female · Ira' },
+                  { tutor: 'Ari' as const, gender: 'male', label: 'Ari · male preference' },
+                  { tutor: 'Ira' as const, gender: 'female', label: 'Ira · female preference' },
                 ]).map(({ tutor, gender, label }) => (
                   <div className="speech-gender-choice" key={gender}>
                     <button
@@ -2854,8 +2851,8 @@ function App() {
                       className="speech-gender-preview"
                       type="button"
                       disabled={previewingTutorVoice !== null}
-                      aria-label={`Preview ${tutor}'s ${gender} voice`}
-                      onClick={() => void previewTutorVoice(tutor === 'Ari' ? 'Playful' : 'Airy', tutor)}
+                      aria-label={`Preview ${tutor}'s voice`}
+                      onClick={() => void previewTutorVoice(tutor === 'Ari' ? 'Playful' : 'Lively', tutor)}
                     >
                       <Icon name="volume" size={15} />
                       {previewingTutorVoice === tutor ? 'Playing…' : 'Preview voice'}
@@ -2994,7 +2991,11 @@ function App() {
                 const nextNative = settings.nativeLanguageCode ?? sourceCode
                 setTargetCode(nextTarget)
                 setSourceCode(nextNative)
-                updateSpeechPreferences({ gender: getTutorSpeechGender(settings.tutorName ?? 'Ira') })
+                const tutorName = settings.tutorName ?? 'Ira'
+                updateSpeechPreferences({
+                  gender: getTutorSpeechGender(tutorName),
+                  flavor: tutorName === 'Ari' ? 'Playful' : 'Lively',
+                })
                 setPage('home')
                 setOnboardingOpen(false)
               }}

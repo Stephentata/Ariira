@@ -3,6 +3,7 @@ export type SpeechPreferences = { gender: SpeechGender; flavor: string; rate: nu
 
 export const SPEECH_PREFERENCES_KEY: string
 export const DEFAULT_SPEECH_PREFERENCES: Readonly<SpeechPreferences>
+export function getTutorPreviewText(languageCode: string): string
 export function getTutorSpeechGender(tutorName: 'Ari' | 'Ira'): SpeechGender
 export function readSpeechPreferences(storage: Pick<Storage, 'getItem'>): SpeechPreferences
 export function saveSpeechPreferences(storage: Pick<Storage, 'setItem'>, preferences: SpeechPreferences): void

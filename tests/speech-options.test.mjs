@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { LANGUAGES } from '../src/language-options.js'
 import {
   buildLocalSpeechRequest,
   DEFAULT_SPEECH_PREFERENCES,
+  getTutorPreviewText,
   getTutorSpeechGender,
   readSpeechPreferences,
   requestLocalSpeech,
@@ -48,6 +50,48 @@ test('Ari and Ira always map to their configured tutor voice genders', () => {
   assert.throws(() => getTutorSpeechGender('Unknown'), /Choose Ari or Ira/)
 })
 
+test('profile voice previews use target-language samples across the language catalog', () => {
+  const samples = {
+    en: 'Hello! Let’s practise together.',
+    fr: 'Bonjour ! On va pratiquer ensemble.',
+    zh: '你好！我们一起练习吧。',
+    es: '¡Hola! Vamos a practicar juntos.',
+    ja: 'こんにちは！一緒に練習しましょう。',
+    ko: '안녕하세요! 함께 연습해요.',
+    de: 'Hallo! Lass uns zusammen üben.',
+    ar: 'مرحبًا! لنتدرب معًا.',
+    pt: 'Olá! Vamos praticar juntos.',
+    it: 'Ciao! Esercitiamoci insieme.',
+    hi: 'नमस्ते! आइए साथ में अभ्यास करें।',
+    tr: 'Merhaba! Hadi birlikte pratik yapalım.',
+    ru: 'Привет! Давай потренируемся вместе.',
+    vi: 'Xin chào! Cùng luyện tập nhé.',
+    th: 'สวัสดี! มาฝึกไปด้วยกันนะ',
+    id: 'Halo! Mari berlatih bersama.',
+    nl: 'Hallo! Laten we samen oefenen.',
+    pl: 'Cześć! Poćwiczmy razem.',
+    sv: 'Hej! Nu övar vi tillsammans.',
+    da: 'Hej! Lad os øve sammen.',
+    no: 'Hei! La oss øve sammen.',
+    fi: 'Hei! Harjoitellaan yhdessä.',
+    el: 'Γεια! Ας εξασκηθούμε μαζί.',
+    he: 'שלום! בואו נתרגל יחד.',
+    uk: 'Привіт! Попрактикуймося разом.',
+    cs: 'Ahoj! Pojďme společně procvičovat.',
+    ro: 'Bună! Hai să exersăm împreună.',
+    hu: 'Szia! Gyakoroljunk együtt.',
+    ms: 'Helo! Mari berlatih bersama.',
+    sw: 'Habari! Tufanye mazoezi pamoja.',
+  }
+  for (const [languageCode, sample] of Object.entries(samples)) {
+    assert.equal(getTutorPreviewText(languageCode), sample)
+  }
+  for (const language of LANGUAGES) {
+    assert.ok(getTutorPreviewText(language.code), `missing preview sample for ${language.code}`)
+  }
+  assert.throws(() => getTutorPreviewText('xx'), /No tutor voice preview text/)
+})
+
 test('local speech requests contain the source text, language, and selected gender', () => {
   assert.deepEqual(buildLocalSpeechRequest('Bonjour !', 'fr-FR', 'female'), {
     input: 'Bonjour !',
@@ -84,7 +128,7 @@ test('local speech client returns valid audio and surfaces service errors', asyn
   )
   await assert.rejects(
     requestLocalSpeech('Hello', 'en-US', 'female', async () => new Response('Bad Gateway', { status: 502 })),
-    /cannot reach its local speech service on port 3901.*Start the Ari voice service/,
+    /cannot reach the speech service.*Check the configured voice service/,
   )
   await assert.rejects(
     requestLocalSpeech('Hello', 'en-US', 'female', async () => new Response('Gateway Timeout', { status: 504 })),
@@ -101,6 +145,6 @@ test('local speech client returns valid audio and surfaces service errors', asyn
     requestLocalSpeech('Hello', 'en-US', 'female', async () => {
       throw new TypeError('connection refused')
     }),
-    /local voice service is not responding on port 3901/,
+    /speech service is not responding.*Check the server connection/,
   )
 })

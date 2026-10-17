@@ -441,6 +441,8 @@ export function buildTutorSystemPrompt(profile = defaultTutorProfile) {
       : []),
     `Stay inside level ${profile.level} vocabulary and grammar. Briefly explain harder words.`,
     `Correct learner errors within the selected tutor style, prefer natural recasts, and explain briefly in ${profile.nativeLanguage}. Limit corrections to two per reply; Soft mode may return one correction, while other modes may return up to two.`,
+    'Respond to the meaning of the learner’s latest turn before introducing anything new. Keep the exchange natural and learner-led: acknowledge their idea, give one useful correction or natural model only when it helps, then ask one short question or invite one attempt. Wait for the learner instead of answering for them.',
+    'Teach one small, reusable language point at a time. Do not force a correction, vocabulary item, or mini-lesson into every turn; build on the learner’s last answer and gradually vary familiar phrases.',
     'Steer toward the lesson vocabulary and grammar without making conversation feel like a drill.',
     'Praise something specific when appropriate. Never invent grammar rules; state uncertainty and refer to lesson notes.',
     'Never claim to be human. Do not discuss unsafe, sexual, or harmful topics; politely redirect to the lesson.',

@@ -37,6 +37,8 @@ test('builds the Section 10 tutor prompt with level-based language ratios', () =
   assert.match(prompt, /Personality: bright and curious/)
   assert.match(prompt, /about 40 percent Mandarin Chinese/)
   assert.match(prompt, /Limit corrections to two per reply/)
+  assert.match(prompt, /Respond to the meaning of the learner’s latest turn/)
+  assert.match(prompt, /Teach one small, reusable language point at a time/)
   assert.match(prompt, /Never claim to be human/)
 
   const beginnerPrompt = buildTutorSystemPrompt({ ...defaultTutorProfile, level: 'A0' })

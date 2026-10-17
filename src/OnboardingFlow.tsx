@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { LANGUAGES, type LanguageOption } from './language-options.js'
-import { getTutorSpeechGender } from './speech-options.js'
+import { getTutorPreviewText, getTutorSpeechGender } from './speech-options.js'
 import { playSpeechAudio } from './speech-playback.js'
 import { TutorService } from './tutor-service.js'
 import type { LearnerSettings } from './learner-data.js'
@@ -230,14 +230,10 @@ export default function OnboardingFlow({ initialTargetCode, initialNativeCode, o
   async function previewTutor(tutor: 'Ari' | 'Ira') {
     setVoicePreviewError('')
     setPreviewingTutor(tutor)
-    const preview = targetLanguage.code === 'fr'
-      ? `Bonjour, je m'appelle ${tutor}. Prêt à pratiquer ensemble ?`
-      : targetLanguage.code === 'zh'
-        ? `你好，我是${tutor}。我们一起练习吧。`
-        : `Hi, I’m ${tutor}. Ready to practise together?`
+    const preview = getTutorPreviewText(targetLanguage.code)
     try {
       await playSpeechAudio(preview, targetLanguage.locale, getTutorSpeechGender(tutor), globalThis, {
-        flavor: tutor === 'Ari' ? 'Playful' : 'Airy',
+        flavor: tutor === 'Ari' ? 'Playful' : 'Lively',
         rate: 1,
       })
     } catch (error) {

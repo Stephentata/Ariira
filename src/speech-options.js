@@ -9,6 +9,45 @@ export function getTutorSpeechGender(tutorName) {
   throw new Error('Choose Ari or Ira to select a tutor voice.')
 }
 
+const TUTOR_PREVIEW_TEXT = Object.freeze({
+  en: 'Hello! Let’s practise together.',
+  es: '¡Hola! Vamos a practicar juntos.',
+  fr: 'Bonjour ! On va pratiquer ensemble.',
+  de: 'Hallo! Lass uns zusammen üben.',
+  it: 'Ciao! Esercitiamoci insieme.',
+  pt: 'Olá! Vamos praticar juntos.',
+  ja: 'こんにちは！一緒に練習しましょう。',
+  zh: '你好！我们一起练习吧。',
+  ko: '안녕하세요! 함께 연습해요.',
+  hi: 'नमस्ते! आइए साथ में अभ्यास करें।',
+  ar: 'مرحبًا! لنتدرب معًا.',
+  tr: 'Merhaba! Hadi birlikte pratik yapalım.',
+  ru: 'Привет! Давай потренируемся вместе.',
+  vi: 'Xin chào! Cùng luyện tập nhé.',
+  th: 'สวัสดี! มาฝึกไปด้วยกันนะ',
+  id: 'Halo! Mari berlatih bersama.',
+  nl: 'Hallo! Laten we samen oefenen.',
+  pl: 'Cześć! Poćwiczmy razem.',
+  sv: 'Hej! Nu övar vi tillsammans.',
+  da: 'Hej! Lad os øve sammen.',
+  no: 'Hei! La oss øve sammen.',
+  fi: 'Hei! Harjoitellaan yhdessä.',
+  el: 'Γεια! Ας εξασκηθούμε μαζί.',
+  he: 'שלום! בואו נתרגל יחד.',
+  uk: 'Привіт! Попрактикуймося разом.',
+  cs: 'Ahoj! Pojďme společně procvičovat.',
+  ro: 'Bună! Hai să exersăm împreună.',
+  hu: 'Szia! Gyakoroljunk együtt.',
+  ms: 'Helo! Mari berlatih bersama.',
+  sw: 'Habari! Tufanye mazoezi pamoja.',
+})
+
+export function getTutorPreviewText(languageCode) {
+  const sample = TUTOR_PREVIEW_TEXT[languageCode]
+  if (!sample) throw new Error(`No tutor voice preview text is configured for ${languageCode}.`)
+  return sample
+}
+
 export function readSpeechPreferences(storage) {
   const serialized = storage.getItem(SPEECH_PREFERENCES_KEY)
   if (serialized === null) return { ...DEFAULT_SPEECH_PREFERENCES }
@@ -83,15 +122,15 @@ async function getErrorMessage(response) {
   }
   if (detail) return detail
   if (response.status === 502) {
-    return 'Ari cannot reach its local speech service on port 3901. Start the Ari voice service, then try again.'
+    return 'Ari cannot reach the speech service. Check the configured voice service, then try again.'
   }
   if (response.status === 504) {
-    return 'Ari’s local voice service took too long to generate speech. Wait for model loading to finish, then try again.'
+    return 'Ari’s speech service took too long to generate speech. Please try again shortly.'
   }
   if (response.status === 500 || response.status === 503) {
-    return 'Ari’s local voice service could not generate speech. Check its terminal for model or setup errors.'
+    return 'Ari’s speech service is not configured or could not generate speech. Check its server settings, then try again.'
   }
-  return `Ari’s local voice service could not generate speech (HTTP ${response.status}).`
+  return `Ari’s speech service could not generate speech (HTTP ${response.status}).`
 }
 
 export async function requestLocalSpeech(text, locale, gender, fetcher = fetch, signal) {
@@ -106,16 +145,16 @@ export async function requestLocalSpeech(text, locale, gender, fetcher = fetch, 
     })
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error
-    throw new Error('Ari’s local voice service is not responding on port 3901. Start it, then try again.')
+    throw new Error('Ari’s speech service is not responding. Check the server connection, then try again.')
   }
 
   if (!response.ok) throw new Error(await getErrorMessage(response))
   const contentType = response.headers.get('content-type')?.toLowerCase() ?? ''
   if (!contentType.startsWith('audio/')) {
-    throw new Error('Ari’s local voice service returned a non-audio response.')
+    throw new Error('Ari’s speech service returned a non-audio response.')
   }
 
   const audio = await response.blob()
-  if (!audio.size) throw new Error('Ari’s local voice service returned an empty audio response.')
+  if (!audio.size) throw new Error('Ari’s speech service returned an empty audio response.')
   return audio
 }

@@ -35,8 +35,42 @@ export function selectBrowserSpeechVoice(voices, locale, gender, flavor = '') {
   }[flavor]
   return matchingLanguage.find((voice) => flavorPattern?.test(voice.name ?? '') && genderPattern.test(voice.name ?? ''))
     ?? matchingLanguage.find((voice) => genderPattern.test(voice.name ?? ''))
-    ?? voices.find((voice) => genderPattern.test(voice.name ?? ''))
+    ?? matchingLanguage[0]
     ?? null
+}
+
+function getVoiceDelivery(flavor, rate) {
+  const styles = {
+    Warm: { rate: 1.02, pitch: 1.02 },
+    Lively: { rate: 1.06, pitch: 1.08 },
+    Clear: { rate: 1.03, pitch: 1.02 },
+    Airy: { rate: 1.03, pitch: 1.06 },
+    Playful: { rate: 1.05, pitch: 1.07 },
+    Deep: { rate: 1, pitch: 0.94 },
+    Bold: { rate: 1.04, pitch: 1.01 },
+    Calm: { rate: 0.97, pitch: 0.98 },
+  }
+  const style = styles[flavor] ?? { rate: 1, pitch: 1 }
+  const requestedRate = Number.isFinite(rate) ? rate : 1
+  return {
+    rate: Math.min(1.25, Math.max(0.75, requestedRate * style.rate)),
+    pitch: style.pitch,
+  }
+}
+
+async function getBrowserSpeechVoices(synthesis) {
+  const voices = synthesis.getVoices()
+  if (voices.length || typeof synthesis.addEventListener !== 'function') return voices
+  return new Promise((resolve) => {
+    let timeout
+    const finish = () => {
+      synthesis.removeEventListener?.('voiceschanged', finish)
+      clearTimeout(timeout)
+      resolve(synthesis.getVoices())
+    }
+    synthesis.addEventListener('voiceschanged', finish, { once: true })
+    timeout = setTimeout(finish, 1200)
+  })
 }
 
 export function cancelSpeechPlayback() {
@@ -72,20 +106,27 @@ export function cancelSpeechPlayback() {
   }
 }
 
-function playBrowserSpeech(text, locale, gender, browserApis, generation, localError, options) {
+async function playBrowserSpeech(text, locale, gender, browserApis, generation, localError, options) {
   const synthesis = browserApis.speechSynthesis
   const Utterance = browserApis.SpeechSynthesisUtterance
   if (!synthesis || typeof Utterance !== 'function') throw localError
 
+  activeSpeechSynthesis = synthesis
+  const voices = await getBrowserSpeechVoices(synthesis)
+  if (generation !== playbackGeneration) {
+    throw new DOMException('Speech playback was cancelled.', 'AbortError')
+  }
   const utterance = new Utterance(text)
   utterance.lang = locale
-  const voice = selectBrowserSpeechVoice(synthesis.getVoices(), locale, gender, options.flavor)
+  const voice = selectBrowserSpeechVoice(voices, locale, gender, options.flavor)
   if (!voice) {
-    throw new Error(`No ${gender}-sounding browser voice is available. Enable a matching voice on this device or start Ari’s local speech service.`)
+    activeSpeechSynthesis = null
+    throw new Error(`No installed browser voice supports ${locale}. Configure hosted speech for this language or add a matching voice in your device settings. Speech service detail: ${localError instanceof Error ? localError.message : 'unavailable'}`)
   }
+  const delivery = getVoiceDelivery(options.flavor, options.rate)
   utterance.voice = voice
-  utterance.rate = options.rate
-  activeSpeechSynthesis = synthesis
+  utterance.rate = delivery.rate
+  utterance.pitch = delivery.pitch
   activeSpeechUtterance = utterance
   activeLevelCallback = options.onLevel ?? null
 
@@ -166,6 +207,7 @@ export async function playSpeechAudio(text, locale, gender, browserApis = global
   activeController = null
   const objectUrl = URL.createObjectURL(audioBlob)
   const audio = new Audio(objectUrl)
+  audio.playbackRate = getVoiceDelivery(options.flavor, options.rate).rate
   activeObjectUrl = objectUrl
   activeAudio = audio
   activeLevelCallback = options.onLevel ?? null

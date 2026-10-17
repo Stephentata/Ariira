@@ -478,7 +478,7 @@ function App() {
   const [helpPhraseAfterMessageId, setHelpPhraseAfterMessageId] = useState<number | null>(null)
   const [speechCorrectionEditing, setSpeechCorrectionEditing] = useState(false)
   const [voiceError, setVoiceError] = useState('')
-  const [voiceInputMode, setVoiceInputMode] = useState<VoiceInputMode>('tap')
+  const [voiceInputMode] = useState<VoiceInputMode>('tap')
   const [voiceLatencyMs, setVoiceLatencyMs] = useState<number | null>(null)
   const [speechPreferenceState, setSpeechPreferenceState] = useState(getInitialSpeechPreferenceState)
   const [previewingTutorVoice, setPreviewingTutorVoice] = useState<'Ari' | 'Ira' | null>(null)
@@ -1457,15 +1457,6 @@ function App() {
     setVoiceListening(false)
   }
 
-  function changeVoiceInputMode(mode: VoiceInputMode) {
-    if (mode === voiceInputMode || tutorPendingRef.current) return
-    if (voiceConversationRef.current) stopVoiceConversation()
-    setVoiceInputMode(mode)
-    setVoiceError('')
-    setVoiceTranscript('')
-    setVoiceLatencyMs(null)
-  }
-
   function stopVoiceConversation() {
     speechGenerationRef.current += 1
     voiceConversationRef.current = false
@@ -2114,6 +2105,16 @@ function App() {
         <header className="topbar">
           <div className="breadcrumb">{page === 'home' && liveSession ? <strong className="session-mobile-brand">Ariira</strong> : <>Your space <span>/</span> <strong>{page === 'home' ? 'Home' : pageTitle}</strong></>}</div>
           <div className="topbar-actions">
+            {page === 'home' && (
+              <details className="session-menu topbar-session-menu" open={sessionMenuOpen} onToggle={(event) => setSessionMenuOpen(event.currentTarget.open)}>
+                <summary aria-label="Home menu">Menu</summary>
+                <div className="session-menu-actions">
+                  <button type="button" onClick={resetTutorConversation} disabled={!liveSession || tutorPending}>Start over</button>
+                  <button type="button" onClick={endTutorSession} disabled={!liveSession || tutorPending}>End session</button>
+                  <button type="button" onClick={() => setPage('settings')}>Settings</button>
+                </div>
+              </details>
+            )}
             <button className="streak-pill" aria-label={`Your ${learningSummary.currentStreak} day streak`}><span>✦</span> {learningSummary.currentStreak} day streak</button>
             <button
               className="theme-switch"
@@ -2166,14 +2167,6 @@ function App() {
                       {tutorError ? 'Ready for typed practice' : `Talk with ${learnerData.settings.tutorName}`}
                     </span>
                     {learnerData.settings.tutorMode === 'strict' && <button className="button button-outline ease-up-button" type="button" onClick={() => updateLearnerSettings({ tutorMode: 'balanced' })}>Ease up</button>}
-                    <details className="session-menu">
-                      <summary aria-label="Home tutor menu">Menu</summary>
-                      <div className="session-menu-actions">
-                        <button type="button" onClick={resetTutorConversation} disabled={!liveSession || tutorPending}>Start over</button>
-                        <button type="button" onClick={endTutorSession} disabled={!liveSession || tutorPending}>End session</button>
-                        <button type="button" onClick={() => setPage('settings')}>Settings</button>
-                      </div>
-                    </details>
                   </div>
                   {sessionSummary && (
                     <section className="session-summary-card" aria-label="End of session summary">
@@ -2195,7 +2188,7 @@ function App() {
                       : voiceInputMode === 'hold'
                         ? `Start speaking with ${learnerData.settings.tutorName}`
                         : `Press to speak with ${learnerData.settings.tutorName}`}
-                    title={liveSession ? 'Tap to speak, or hold to speak' : 'Press to speak with your tutor'}
+                    title={liveSession ? 'Tap to speak or interrupt your tutor' : 'Tap to start a speaking session'}
                     onPointerDown={(event) => {
                       beginMascotInteraction(event)
                       if (liveSession && voiceInputMode === 'hold') beginHoldToSpeak()
@@ -2439,14 +2432,6 @@ function App() {
                   <button className="live-transcript-toggle" type="button" aria-expanded={sessionPlanOpen} onClick={() => { setSessionPlanOpen((open) => !open); setSessionNotesOpen(false) }}>Lesson plan</button>
                   <button className="live-transcript-toggle" type="button" aria-expanded={sessionNotesOpen} onClick={() => { setSessionNotesOpen((open) => !open); setSessionPlanOpen(false) }}>Notes</button>
                   {learnerData.settings.tutorMode === 'strict' && <button className="button button-outline ease-up-button" type="button" onClick={() => { updateLearnerSettings({ tutorMode: 'balanced' }); setSafeguardOffer(false) }}>Ease up</button>}
-                  <details className="session-menu" open={sessionMenuOpen} onToggle={(event) => setSessionMenuOpen(event.currentTarget.open)}>
-                    <summary aria-label="Session menu">Menu</summary>
-                    <div className="session-menu-actions">
-                      <button type="button" onClick={resetTutorConversation} disabled={tutorPending}>Start over</button>
-                      <button type="button" onClick={endTutorSession} disabled={tutorPending}>End session</button>
-                      <button type="button" onClick={() => setPage('settings')}>Settings</button>
-                    </div>
-                  </details>
                 </div>
                 <div className="session-tutor-quick-tools">
                   <div className="home-mode-choices" role="group" aria-label="Choose your tutor style">
@@ -2511,10 +2496,6 @@ function App() {
                       {sessionPaused ? 'Paused' : tutorPending ? 'Checking...' : voiceSpeaking ? `${learnerData.settings.tutorName} is speaking` : voiceListening ? 'Listening...' : 'Your turn'}
                     </span>
                   </div>
-                  <div className="voice-input-mode-toggle" role="group" aria-label="Voice input mode">
-                    <button type="button" aria-pressed={voiceInputMode === 'tap'} disabled={tutorPending} onClick={() => changeVoiceInputMode('tap')}>Tap to chat</button>
-                    <button type="button" aria-pressed={voiceInputMode === 'hold'} disabled={tutorPending} onClick={() => changeVoiceInputMode('hold')}>Hold to speak</button>
-                  </div>
                   <p className="voice-prompt">
                     {tutorPending
                       ? 'Thinking about your answer.'
@@ -2532,7 +2513,7 @@ function App() {
                               ? `Go ahead — ${learnerData.settings.tutorName} is listening for your next thought.`
                                 : voiceError
                                   ? 'Voice is unavailable. Type a reply below or retry your microphone.'
-                                  : 'Tap to chat, hold to speak, or type a reply below.'}
+                                  : 'Speak naturally, then pause when you finish, or type a reply below.'}
                   </p>
                   {learnerData.settings.tutorMode === 'strict' && <p className="strict-safe-word">You can type “ease up” or use the Ease up button at any time. Strict feedback stays respectful.</p>}
                   <div className={`mobile-tutor-thought is-${voiceMode}`} role="status" aria-live="polite" aria-label={tutorPending ? `${learnerData.settings.tutorName} is thinking` : voiceSpeaking ? `${learnerData.settings.tutorName} is speaking` : voiceListening ? `${learnerData.settings.tutorName} is listening` : 'Ready when you are'}>

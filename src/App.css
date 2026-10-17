@@ -1688,38 +1688,6 @@ p {
   background: #98d8d0;
 }
 
-.voice-input-mode-toggle {
-  display: flex;
-  gap: 4px;
-  margin-top: 12px;
-  padding: 3px;
-  border: 1px solid #e2f4f0;
-  border-radius: 9px;
-  background: rgba(255, 255, 255, .72);
-}
-
-.voice-input-mode-toggle button {
-  padding: 6px 9px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 8px;
-  cursor: pointer;
-}
-
-.voice-input-mode-toggle button[aria-pressed='true'] {
-  background: white;
-  box-shadow: 0 1px 4px rgba(16, 104, 111, .12);
-  color: var(--accent-deep);
-}
-
-.voice-input-mode-toggle button:disabled {
-  cursor: not-allowed;
-  opacity: .6;
-}
-
 .voice-panel.is-listening .voice-status-dot {
   background: #4fb8b4;
   box-shadow: 0 0 0 4px rgba(79, 184, 180, .13);
@@ -2463,6 +2431,46 @@ p {
 
   .session-menu summary::-webkit-details-marker {
     display: none;
+  }
+
+  .topbar-actions .session-menu {
+    z-index: 1;
+  }
+
+  .topbar-actions .session-menu summary {
+    display: flex;
+    min-height: 40px;
+    align-items: center;
+    padding: 0 14px;
+    border-radius: 10px;
+    background: var(--surface);
+    font-size: 12px;
+  }
+
+  .topbar-actions .session-menu summary::after {
+    width: 0;
+    height: 0;
+    margin: 2px 0 0 8px;
+    border: 4px solid transparent;
+    border-top-color: currentColor;
+    content: '';
+  }
+
+  .topbar-actions .session-menu[open] summary::after {
+    transform: rotate(180deg);
+  }
+
+  .topbar-actions .session-menu-actions {
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 190px;
+    padding: 6px;
+  }
+
+  .topbar-actions .session-menu-actions button {
+    min-height: 44px;
+    padding: 10px 12px;
+    font-size: 13px;
   }
 
   .session-menu-actions {
@@ -7907,7 +7915,7 @@ p {
 
   .home-session-shell .topbar {
     position: relative;
-    z-index: 45;
+    z-index: 60;
     height: 58px;
     min-height: 58px;
     padding: 0 18px;
@@ -7996,22 +8004,20 @@ p {
     display: none;
   }
 
-  .home-session-shell .session-menu {
-    position: fixed;
-    z-index: 55;
-    top: 10px;
-    right: 100px;
+  .home-session-shell .topbar-actions .session-menu {
+    position: relative;
+    z-index: 65;
     margin: 0;
   }
 
-  .home-session-shell .session-menu summary {
+  .home-session-shell .topbar-actions .session-menu summary {
     min-height: 34px;
-    padding: 0 10px;
+    padding: 0 12px;
     border: 1px solid var(--line);
-    border-radius: 999px;
+    border-radius: 10px;
     background: var(--surface);
     color: var(--text-main);
-    font-size: 10px;
+    font-size: 11px;
   }
 
   .home-session-shell .voice-panel {
@@ -8035,14 +8041,10 @@ p {
     display: none;
   }
 
-  .home-session-shell .voice-input-mode-toggle {
-    position: absolute;
-    z-index: 5;
-    top: 12px;
-    left: 50%;
-    margin: 0;
-    transform: translateX(-50%);
-    opacity: .84;
+  .home-session-shell .topbar-actions .session-menu-actions {
+    z-index: 70;
+    right: 0;
+    min-width: 190px;
   }
 
   .home-session-shell .voice-controls {
@@ -8293,5 +8295,170 @@ p {
   .tutor-orb-scene.is-speaking .tutor-avatar-glow,
   .tutor-orb-scene.is-listening .tutor-avatar-glow {
     transition: opacity 120ms linear;
+  }
+}
+
+@media (max-width: 760px) {
+  .home-idle-shell {
+    height: 100dvh;
+    min-height: 100dvh;
+    overflow: hidden;
+  }
+
+  .home-idle-shell .main-area {
+    display: flex;
+    height: 100dvh;
+    min-height: 100dvh;
+    flex-direction: column;
+    overflow: hidden;
+    padding-bottom: 0;
+  }
+
+  .home-idle-shell .topbar {
+    z-index: 60;
+    flex: 0 0 58px;
+    height: 58px;
+    min-height: 58px;
+    padding: 0 12px;
+    overflow: visible;
+  }
+
+  .home-idle-shell .topbar .breadcrumb {
+    font-size: 0;
+  }
+
+  .home-idle-shell .topbar .breadcrumb strong {
+    font-size: 12px;
+  }
+
+  .home-idle-shell .topbar .streak-pill {
+    width: 35px;
+    height: 35px;
+    justify-content: center;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 0;
+  }
+
+  .home-idle-shell .topbar .streak-pill span {
+    font-size: 14px;
+  }
+
+  .home-idle-shell .topbar-actions .session-menu-actions {
+    z-index: 70;
+  }
+
+  .home-idle-shell .home-page-content {
+    display: flex;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 8px 12px calc(80px + env(safe-area-inset-bottom));
+  }
+
+  .home-idle-shell .home-studio {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    flex: 1 1 auto;
+    margin: 0;
+    overflow: hidden;
+    border-radius: 20px;
+  }
+
+  .home-idle-shell .home-studio .home-tutor-panel {
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 12px 14px 14px;
+  }
+
+  .home-idle-shell .home-chapter-label {
+    margin-top: 0;
+    font-size: 10px;
+  }
+
+  .home-idle-shell .home-tutor-panel h1 {
+    margin: 7px 0 3px;
+    font-size: clamp(21px, 6vw, 27px);
+  }
+
+  .home-idle-shell .home-tutor-prompt {
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
+  .home-idle-shell .home-setup-required {
+    gap: 7px 10px;
+    margin-top: 8px;
+    padding: 8px 10px;
+  }
+
+  .home-idle-shell .home-setup-required p {
+    font-size: 11px;
+  }
+
+  .home-idle-shell .home-stage-toolbar {
+    width: 100%;
+    margin-top: 8px;
+  }
+
+  .home-idle-shell .home-mascot-wrap {
+    width: min(42vw, 190px, 23dvh);
+    height: min(42vw, 190px, 23dvh);
+    flex: 0 0 auto;
+    margin: 10px 0;
+  }
+
+  .home-idle-shell .home-start-button {
+    width: min(100%, 400px);
+    min-height: 48px;
+    margin: 0;
+  }
+
+  .home-idle-shell .home-language-warning {
+    margin-top: 5px;
+    font-size: 10px;
+  }
+
+  .home-idle-shell .home-tutor-choices {
+    gap: 5px;
+    margin-top: 7px;
+  }
+
+  .home-idle-shell .home-mode-choices {
+    width: min(100%, 340px);
+    margin: 0 auto;
+  }
+
+  .home-idle-shell .home-mode-swatch {
+    width: 36px;
+    height: 25px;
+  }
+
+  .home-idle-shell .home-mode-description {
+    min-height: 0;
+    margin: 0;
+    font-size: 10px;
+  }
+
+  .home-idle-shell .home-tutor-choices .session-tutor-shortcuts {
+    margin-top: 4px;
+  }
+
+  .home-idle-shell .session-tutor-shortcuts {
+    gap: 7px;
+  }
+
+  .home-idle-shell .session-tutor-shortcuts button {
+    min-height: 40px;
+  }
+
+  .home-idle-shell .home-free-chat-shortcut {
+    margin-top: 6px;
   }
 }

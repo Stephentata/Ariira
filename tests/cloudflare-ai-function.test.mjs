@@ -82,7 +82,7 @@ test('Pages chat function returns an explicit error when Workers AI fails', asyn
       env: { AI: { run: async () => { throw new Error('upstream unavailable') } } },
     })
     assert.equal(response.status, 502)
-    assert.match((await response.json()).error, /could not complete the tutor reply/)
+    assert.match((await response.json()).error, /Workers AI request failed: upstream unavailable/)
   } finally {
     console.error = originalError
   }

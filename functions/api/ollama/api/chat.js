@@ -80,6 +80,9 @@ export async function onRequestPost({ request, env }) {
     return jsonResponse({ message: { role: 'assistant', content } })
   } catch (error) {
     console.error('[Workers AI] Tutor inference failed', error)
-    return jsonResponse({ error: 'Cloudflare Workers AI could not complete the tutor reply. Please try again.' }, 502)
+    const detail = error instanceof Error
+      ? error.message.replace(/\s+/g, ' ').slice(0, 240)
+      : 'Unknown Workers AI error.'
+    return jsonResponse({ error: `Cloudflare Workers AI request failed: ${detail}` }, 502)
   }
 }

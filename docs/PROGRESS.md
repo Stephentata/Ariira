@@ -149,7 +149,7 @@
 
 ## M5 — Tutor chat with local LLM
 
-**Status:** Local development is verified with Ollama. Production is wired through a Cloudflare Pages Function to Workers AI; live inference still requires the deployment smoke test. The prototype is not approved as authoritative Mandarin instruction.
+**Status:** Local development is verified with Ollama. Production is deployed through a Cloudflare Pages Function to Workers AI and has passed a live structured-reply check. The prototype is not approved as authoritative Mandarin instruction.
 
 ### Works
 
@@ -171,7 +171,8 @@
 - `npm run benchmark:tutor`: 3/3 English-to-Mandarin A1 café turns passed the automated response checks on `qwen2.5-coder:7b`. Measured provider latencies were 886 ms, 687 ms, and 674 ms (749 ms mean); measured ratios were 27%, 27%, and 32%. The first two pass only with the documented 4-point heuristic tolerance.
 - Browser check: a typed coffee order and a milk follow-up received context-aware local-model replies with generated pinyin and English support. A stubbed response also verified correction, new-word, and whiteboard rendering.
 - `git diff --check`: passed.
-- Pages Function unit tests cover Workers AI request mapping, missing binding, malformed/oversized requests, and inference failures. Production inference remains to be smoke-tested after deployment.
+- Pages Function unit tests cover Workers AI request mapping, missing binding, malformed/oversized requests, and inference failures.
+- Production smoke test: the deployed endpoint returned HTTP 200 with the active Llama 3.3 model, and Ariira's real tutor prompt/schema passed the existing A1 Mandarin response validator at a 37.5% target-language ratio.
 
 ### Manual test checklist
 
@@ -191,6 +192,7 @@
 - Language-ratio measurement currently recognizes Mandarin Han characters and English letters only. Other language pairs need their own validated counting and review.
 - The learner profile and lesson context are fixed for the café prototype. Persistent memory, transcript settings, user-configurable goals, and an account-backed tutor are not implemented.
 - Production requires a Workers AI binding named `AI` on the Cloudflare Pages project; configure it in **Settings > Bindings**, then redeploy. Workers AI usage is subject to Cloudflare account limits and billing.
+- The production tutor endpoint is unauthenticated. Configure Cloudflare rate limiting before sharing broadly to reduce abuse and unexpected AI usage.
 - AI-generated corrections and new words are not saved into review cards, and the transcript does not yet include a **Report a mistake** action.
 - The sample Mandarin lessons remain unreviewed and are not used as authoritative tutor content.
 

@@ -64,6 +64,13 @@
     "explain_more": { "type": "string" },
     "hint": { "type": "string" },
     "listen_text": { "type": "string", "minLength": 1 },
+    "reading_text": { "type": "string", "minLength": 1 },
+    "success_criteria": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
     "options": {
       "type": "array",
       "items": { "type": "string" },
@@ -152,6 +159,44 @@
             "minItems": 2,
             "uniqueItems": true,
             "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "reading_comprehension" } }, "required": ["type"] },
+      "then": {
+        "required": ["options", "reading_text"],
+        "properties": {
+          "answer_key": { "type": "string" },
+          "reading_text": { "type": "string", "minLength": 1 },
+          "options": {
+            "type": "array",
+            "minItems": 2,
+            "uniqueItems": true,
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "short_writing" } }, "required": ["type"] },
+      "then": {
+        "required": ["success_criteria"],
+        "properties": {
+          "answer_key": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["sample_answer"],
+            "properties": {
+              "sample_answer": { "type": "string", "minLength": 1 }
+            }
+          },
+          "success_criteria": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
           }
         }
       }

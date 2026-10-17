@@ -95,6 +95,12 @@ test('mock tutor requires input and only responds during conversation stages', (
   assert.throws(() => createMockTutorReply('practice', 'hello'), /does not support/)
 })
 
+test('French lesson preview uses French mock tutor replies', () => {
+  assert.match(createMockTutorReply('warmup', 'Bonjour', 'fr'), /Merci/)
+  assert.match(createMockTutorReply('roleplay', 'Salut', 'fr'), /Je vous écoute/)
+  assert.throws(() => createMockTutorReply('warmup', 'hello', 'es'), /does not support/)
+})
+
 test('only an active session can advance or skip', () => {
   const completed = { ...createLessonSession('zh-a1-u01-l01'), status: 'completed' }
 

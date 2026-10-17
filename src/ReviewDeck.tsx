@@ -9,21 +9,18 @@ import {
   type RecallRating,
   type ReviewCard,
 } from './review-scheduler.js'
+import {
+  encodePcm16Wav,
+  LocalWhisperPronunciationProvider,
+  type PronunciationResult,
+} from './pronunciation-provider.js'
+import { getTutorSpeechGender } from './speech-options.js'
+import { readLearnerSettings } from './learner-data.js'
+import { playSpeechAudio } from './speech-playback.js'
+import { LANGUAGES } from './language-options.js'
 
 type ReviewMode = 'flashcard' | 'listen-and-type' | 'speak-word' | 'use-in-a-sentence'
-type SpeechResultEvent = { results: ArrayLike<ArrayLike<{ transcript: string }>> }
-type SpeechErrorEvent = { error: string }
-type SpeechRecognitionLike = {
-  lang: string
-  continuous: boolean
-  interimResults: boolean
-  onresult: ((event: SpeechResultEvent) => void) | null
-  onerror: ((event: SpeechErrorEvent) => void) | null
-  onend: (() => void) | null
-  start: () => void
-  abort: () => void
-}
-type SpeechRecognitionConstructor = new () => SpeechRecognitionLike
+const MAX_PRONUNCIATION_RECORDING_MS = 10_000
 type ReviewState = { cards: ReviewCard[]; error: string; reviewedToday: number }
 
 const modes: { id: ReviewMode; label: string }[] = [
@@ -60,7 +57,7 @@ function getInitialReviewState(): ReviewState {
   }
 }
 
-function useReviewDeck() {
+function useReviewDeck(targetLanguageCode: string) {
   const [state, setState] = useState(getInitialReviewState)
   const [now] = useState(() => new Date())
 
@@ -86,24 +83,27 @@ function useReviewDeck() {
     }
   }
 
-  return { ...state, now, rateCard }
+  return {
+    ...state,
+    cards: state.cards.filter((card) => (card.languageCode ?? 'zh') === targetLanguageCode),
+    now,
+    rateCard,
+  }
 }
 
-function playCardWord(word: string, setMessage: (message: string) => void) {
-  if (!('speechSynthesis' in window)) {
-    setMessage('Speech playback is unavailable in this browser.')
-    return
-  }
+function playCardWord(word: string, locale: string, setMessage: (message: string) => void) {
   try {
-    window.speechSynthesis.cancel()
-    const utterance = new SpeechSynthesisUtterance(word)
-    utterance.lang = 'zh-CN'
-    utterance.onerror = () => setMessage('Your browser could not play this word. You can still review it.')
-    utterance.onend = () => setMessage('')
-    window.speechSynthesis.speak(utterance)
-    setMessage('Playing with your browser’s available voice; no recording is stored.')
+    const gender = getTutorSpeechGender(readLearnerSettings(window.localStorage).tutorName)
+    setMessage('Generating speech locally with Ari’s voice service…')
+    void playSpeechAudio(word, locale, gender).then(
+      () => setMessage(''),
+      (error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return
+        setMessage(error instanceof Error ? `Voice playback failed: ${error.message}` : 'Voice playback failed.')
+      },
+    )
   } catch (error) {
-    setMessage(error instanceof Error ? `Speech playback failed: ${error.message}` : 'Speech playback failed.')
+    setMessage(error instanceof Error ? `Voice playback failed: ${error.message}` : 'Voice playback failed.')
   }
 }
 
@@ -129,51 +129,243 @@ function ReviewFlow({
   const [answer, setAnswer] = useState('')
   const [answerChecked, setAnswerChecked] = useState<boolean | null>(null)
   const [speechResult, setSpeechResult] = useState('')
+  const [pronunciationResult, setPronunciationResult] = useState<PronunciationResult | null>(null)
+  const [learnerAudioUrl, setLearnerAudioUrl] = useState('')
   const [notice, setNotice] = useState('')
   const [speechError, setSpeechError] = useState('')
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
+  const [isRequestingMicrophone, setIsRequestingMicrophone] = useState(false)
+  const [isCapturing, setIsCapturing] = useState(false)
+  const [isTranscribing, setIsTranscribing] = useState(false)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const mediaStreamRef = useRef<MediaStream | null>(null)
+  const audioChunksRef = useRef<BlobPart[]>([])
+  const pcmChunksRef = useRef<Float32Array[]>([])
+  const pcmSampleRateRef = useRef(0)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const audioSourceRef = useRef<MediaStreamAudioSourceNode | null>(null)
+  const audioProcessorRef = useRef<ScriptProcessorNode | null>(null)
+  const captureTimerRef = useRef<number | null>(null)
+  const captureRequestRef = useRef(false)
+  const learnerAudioUrlRef = useRef('')
+  const mountedRef = useRef(true)
+  const [pronunciationProvider] = useState(() => new LocalWhisperPronunciationProvider())
   const card = cards[0]
+  const targetLanguage = LANGUAGES.find((language) => language.code === (card?.languageCode ?? 'zh')) ?? LANGUAGES[0]
+  const targetLocale = targetLanguage.locale
+  const targetLanguageName = targetLanguage.name
 
-  useEffect(() => () => {
-    const recognition = recognitionRef.current
-    if (recognition) {
-      recognition.onresult = null
-      recognition.onerror = null
-      recognition.onend = null
-      recognition.abort()
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      if (captureTimerRef.current !== null) window.clearTimeout(captureTimerRef.current)
+      const recorder = mediaRecorderRef.current
+      if (recorder && recorder.state !== 'inactive') {
+        recorder.ondataavailable = null
+        recorder.onerror = null
+        recorder.onstop = null
+        recorder.stop()
+      }
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop())
+      stopPcmCapture()
+      pronunciationProvider.dispose()
+      if (learnerAudioUrlRef.current) URL.revokeObjectURL(learnerAudioUrlRef.current)
     }
-  }, [])
+  }, [learnerAudioUrlRef, pronunciationProvider])
 
-  function startSpeechPractice() {
-    const speechWindow = window as Window & {
-      SpeechRecognition?: SpeechRecognitionConstructor
-      webkitSpeechRecognition?: SpeechRecognitionConstructor
+  function stopPcmCapture() {
+    if (audioProcessorRef.current) {
+      audioProcessorRef.current.onaudioprocess = null
+      audioProcessorRef.current.disconnect()
+      audioProcessorRef.current = null
     }
-    const Recognition = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition
-    if (!Recognition) {
-      setSpeechError('Speech recognition is not available in this browser. You can still self-rate your recall.')
+    audioSourceRef.current?.disconnect()
+    audioSourceRef.current = null
+    const context = audioContextRef.current
+    audioContextRef.current = null
+    if (context && context.state !== 'closed') {
+      void context.close().catch((error: unknown) => {
+        console.error('Could not close the pronunciation audio context.', error)
+      })
+    }
+  }
+
+  function collectPcmSamples() {
+    const chunks = pcmChunksRef.current
+    pcmChunksRef.current = []
+    const sampleCount = chunks.reduce((total, chunk) => total + chunk.length, 0)
+    const samples = new Float32Array(sampleCount)
+    let offset = 0
+    for (const chunk of chunks) {
+      samples.set(chunk, offset)
+      offset += chunk.length
+    }
+    return samples
+  }
+
+  function clearLearnerAudio() {
+    if (learnerAudioUrlRef.current) URL.revokeObjectURL(learnerAudioUrlRef.current)
+    learnerAudioUrlRef.current = ''
+    setLearnerAudioUrl('')
+  }
+
+  function stopSpeechPractice() {
+    if (captureTimerRef.current !== null) {
+      window.clearTimeout(captureTimerRef.current)
+      captureTimerRef.current = null
+    }
+    const recorder = mediaRecorderRef.current
+    if (!recorder || recorder.state === 'inactive') return
+    setIsCapturing(false)
+    setIsTranscribing(true)
+    setNotice('Recording stopped. Preparing your speech for local transcription…')
+    recorder.stop()
+  }
+
+  async function startSpeechPractice() {
+    if (captureRequestRef.current || isCapturing || isTranscribing) return
+    captureRequestRef.current = true
+    setSpeechResult('')
+    setPronunciationResult(null)
+    clearLearnerAudio()
+    setSpeechError('')
+    setIsTranscribing(false)
+    setIsRequestingMicrophone(true)
+    setNotice('Requesting microphone access…')
+
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined' || typeof AudioContext === 'undefined') {
+      captureRequestRef.current = false
+      setIsRequestingMicrophone(false)
+      setSpeechError('Microphone recording or local audio processing is not supported in this browser. Try current Chrome or Edge on localhost or a secure page.')
+      setNotice('')
       return
     }
 
     try {
-      const recognition = new Recognition()
-      recognition.lang = 'zh-CN'
-      recognition.continuous = false
-      recognition.interimResults = false
-      recognition.onresult = (event) => {
-        const transcript = event.results[0]?.[0]?.transcript ?? ''
-        setSpeechResult(transcript)
-        setSpeechError('')
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      })
+      if (!mountedRef.current) {
+        stream.getTracks().forEach((track) => track.stop())
+        captureRequestRef.current = false
+        return
       }
-      recognition.onerror = (event) => {
-        setSpeechError(`Could not check your speech (${event.error}). You can still self-rate your recall.`)
+
+      mediaStreamRef.current = stream
+      audioChunksRef.current = []
+      pcmChunksRef.current = []
+      const audioContext = new AudioContext()
+      audioContextRef.current = audioContext
+      await audioContext.resume()
+      pcmSampleRateRef.current = audioContext.sampleRate
+      const audioSource = audioContext.createMediaStreamSource(stream)
+      const audioProcessor = audioContext.createScriptProcessor(4096, 1, 1)
+      const silentOutput = audioContext.createGain()
+      silentOutput.gain.value = 0
+      audioProcessor.onaudioprocess = (event) => {
+        pcmChunksRef.current.push(new Float32Array(event.inputBuffer.getChannelData(0)))
       }
-      recognition.onend = () => setNotice('')
-      recognitionRef.current = recognition
-      setNotice('Listening for one Mandarin word. Ari does not store a recording; browser speech handling follows its provider’s privacy policy.')
-      recognition.start()
+      audioSource.connect(audioProcessor)
+      audioProcessor.connect(silentOutput)
+      silentOutput.connect(audioContext.destination)
+      audioSourceRef.current = audioSource
+      audioProcessorRef.current = audioProcessor
+
+      captureRequestRef.current = false
+      setIsRequestingMicrophone(false)
+      const mimeType = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4']
+        .find((type) => MediaRecorder.isTypeSupported(type))
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
+      mediaRecorderRef.current = recorder
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) audioChunksRef.current.push(event.data)
+      }
+      recorder.onerror = (event) => {
+        setIsCapturing(false)
+        if (captureTimerRef.current !== null) window.clearTimeout(captureTimerRef.current)
+        captureTimerRef.current = null
+        recorder.onstop = null
+        setSpeechError(`Microphone recording failed: ${event.error.message || 'unknown recorder error'}. Please try again.`)
+        setNotice('')
+        stream.getTracks().forEach((track) => track.stop())
+        mediaStreamRef.current = null
+        mediaRecorderRef.current = null
+        stopPcmCapture()
+        pcmChunksRef.current = []
+      }
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop())
+        mediaStreamRef.current = null
+        mediaRecorderRef.current = null
+        const samples = collectPcmSamples()
+        const sampleRate = pcmSampleRateRef.current
+        pcmSampleRateRef.current = 0
+        stopPcmCapture()
+        if (!mountedRef.current) return
+        const recording = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' })
+        audioChunksRef.current = []
+        if (recording.size === 0 || samples.length === 0) {
+          setIsTranscribing(false)
+          setNotice('')
+          setSpeechError('No audio was captured. Please record the word again.')
+          return
+        }
+
+        const audioUrl = URL.createObjectURL(recording)
+        learnerAudioUrlRef.current = audioUrl
+        setLearnerAudioUrl(audioUrl)
+        setNotice('Preparing local Whisper Tiny. On first use, its model files download once.')
+        let transcriptionAudio: Blob
+        try {
+          transcriptionAudio = encodePcm16Wav(samples, sampleRate)
+        } catch (error) {
+          setIsTranscribing(false)
+          setNotice('')
+          setSpeechError(error instanceof Error ? error.message : 'The microphone audio could not be prepared for transcription.')
+          return
+        }
+        void pronunciationProvider.assess(transcriptionAudio, card.word, targetLocale, setNotice)
+          .then((result) => {
+            if (!mountedRef.current) return
+            setSpeechResult(result.recognizedText)
+            setPronunciationResult(result)
+            setNotice('')
+          })
+          .catch((error: unknown) => {
+            if (!mountedRef.current) return
+            setSpeechError(error instanceof Error ? error.message : 'Could not transcribe this recording. Please try again.')
+            setNotice('')
+          })
+          .finally(() => {
+            if (mountedRef.current) setIsTranscribing(false)
+          })
+      }
+      recorder.start()
+      setIsCapturing(true)
+      setNotice('Recording on this device. Say the target, then press Stop. Ari does not save or upload the audio.')
+      captureTimerRef.current = window.setTimeout(stopSpeechPractice, MAX_PRONUNCIATION_RECORDING_MS)
     } catch (error) {
-      setSpeechError(error instanceof Error ? `Could not start listening: ${error.message}` : 'Could not start listening.')
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop())
+      mediaStreamRef.current = null
+      mediaRecorderRef.current = null
+      stopPcmCapture()
+      pcmChunksRef.current = []
+      pcmSampleRateRef.current = 0
+      captureRequestRef.current = false
+      setIsRequestingMicrophone(false)
+      setIsCapturing(false)
+      setNotice('')
+      const name = error instanceof DOMException ? error.name : ''
+      const message = name === 'NotAllowedError' || name === 'SecurityError'
+        ? 'Microphone permission was denied or blocked. Allow microphone access for this site in browser settings, then try again.'
+        : name === 'NotFoundError' || name === 'DevicesNotFoundError'
+          ? 'No microphone was found. Connect or select a microphone, then try again.'
+          : name === 'NotReadableError' || name === 'TrackStartError'
+            ? 'The microphone is unavailable or being used by another app. Close other microphone apps and try again.'
+            : error instanceof Error
+              ? `Could not start microphone recording: ${error.message}`
+              : 'Could not start microphone recording. Check microphone access and try again.'
+      setSpeechError(message)
     }
   }
 
@@ -211,12 +403,15 @@ function ReviewFlow({
               type="button"
               key={item.id}
               aria-pressed={mode === item.id}
+              disabled={isRequestingMicrophone || isCapturing || isTranscribing}
               onClick={() => {
                 setMode(item.id)
                 setRevealed(false)
                 setAnswer('')
                 setAnswerChecked(null)
                 setSpeechResult('')
+                setPronunciationResult(null)
+                clearLearnerAudio()
               }}
             >
               {item.label}
@@ -229,12 +424,12 @@ function ReviewFlow({
         {mode === 'flashcard' && (
           <>
             <span className="review-card-kicker">WHAT DOES THIS MEAN?</span>
-            <strong className="review-word" lang="zh-CN">{card.word}</strong>
+            <strong className="review-word" lang={targetLocale}>{card.word}</strong>
             {card.transliteration && <span className="review-pronunciation">{card.transliteration}</span>}
             {revealed ? (
               <div className="review-answer">
                 <strong>{card.translation}</strong>
-                {card.exampleSentence && <p lang="zh-CN">{card.exampleSentence}</p>}
+                {card.exampleSentence && <p lang={targetLocale}>{card.exampleSentence}</p>}
               </div>
             ) : (
               <button className="button button-outline" type="button" onClick={() => setRevealed(true)}>Reveal meaning</button>
@@ -244,12 +439,12 @@ function ReviewFlow({
 
         {mode === 'listen-and-type' && (
           <>
-            <span className="review-card-kicker">LISTEN AND TYPE THE MANDARIN</span>
+            <span className="review-card-kicker">LISTEN AND TYPE THE {targetLanguageName.toUpperCase()}</span>
             <strong className="review-word-prompt">{card.translation}</strong>
-            <button className="button button-outline" type="button" onClick={() => playCardWord(card.word, setNotice)}>Hear the word</button>
+            <button className="button button-outline" type="button" onClick={() => playCardWord(card.word, targetLocale, setNotice)}>Hear the word</button>
             <form className="review-answer-form" onSubmit={checkTypedAnswer}>
-              <label htmlFor="review-typed-answer">Your answer in characters</label>
-              <input id="review-typed-answer" lang="zh-CN" autoComplete="off" value={answer} onChange={(event) => { setAnswer(event.target.value); setAnswerChecked(null) }} />
+              <label htmlFor="review-typed-answer">Your spelling</label>
+              <input id="review-typed-answer" lang={targetLocale} autoComplete="off" value={answer} onChange={(event) => { setAnswer(event.target.value); setAnswerChecked(null) }} />
               <button className="button button-dark" type="submit" disabled={!answer.trim()}>Check spelling</button>
             </form>
             {answerChecked !== null && <p className={`review-result ${answerChecked ? 'is-correct' : 'is-incorrect'}`} role="status">{answerChecked ? 'Correct — nicely heard.' : `Not quite. The word is ${card.word}.`}</p>}
@@ -258,11 +453,45 @@ function ReviewFlow({
 
         {mode === 'speak-word' && (
           <>
-            <span className="review-card-kicker">SAY THE WORD IN MANDARIN</span>
+            <span className="review-card-kicker">SAY THE WORD IN {targetLanguageName.toUpperCase()}</span>
             <strong className="review-word-prompt">{card.translation}</strong>
-            <button className="button button-dark" type="button" onClick={startSpeechPractice}>Speak now</button>
-            {speechResult && <p className={`review-result ${normalizeAnswer(speechResult) === normalizeAnswer(card.word) ? 'is-correct' : 'is-incorrect'}`} role="status">Heard: <span lang="zh-CN">{speechResult}</span> · {normalizeAnswer(speechResult) === normalizeAnswer(card.word) ? 'matches the card' : `target: ${card.word}`}</p>}
-            <p className="review-privacy-note">Browser speech recognition is approximate. Ari does not store a recording; audio handling depends on the browser’s speech provider.</p>
+            <button className="button button-outline" type="button" onClick={() => playCardWord(card.word, targetLocale, setNotice)}>Hear example pronunciation</button>
+            <button
+              className="button button-dark"
+              type="button"
+              onClick={isCapturing ? stopSpeechPractice : startSpeechPractice}
+              disabled={isRequestingMicrophone || isTranscribing}
+            >
+              {isRequestingMicrophone ? 'Waiting for microphone…' : isCapturing ? 'Stop recording' : isTranscribing ? 'Checking locally…' : 'Speak now'}
+            </button>
+            {speechResult && <p className="review-result" lang={targetLocale}>Heard: {speechResult}</p>}
+            {learnerAudioUrl && (
+              <div className="pronunciation-audio-compare" aria-label="Compare your recording with the model">
+                <div>
+                  <strong>Your recording</strong>
+                  <audio controls preload="none" src={learnerAudioUrl} aria-label="Play your pronunciation recording" />
+                </div>
+                <div>
+                  <strong>Example pronunciation · browser voice</strong>
+                  <button className="button button-outline" type="button" onClick={() => playCardWord(card.word, targetLocale, setNotice)}>Play example</button>
+                </div>
+              </div>
+            )}
+            {pronunciationResult && (
+              <section className={`pronunciation-feedback is-${pronunciationResult.status}`} aria-label="Pronunciation feedback" role="status">
+                <strong>{pronunciationResult.status === 'understood' ? 'Understood' : 'Try again'}</strong>
+                <p>Target: <mark lang={targetLocale}>{pronunciationResult.referenceText}</mark></p>
+                {pronunciationResult.problemWords.map((word, index) => (
+                  <p key={`${word.target}-${index}`}>
+                    Check: <mark lang={targetLocale}>{word.target}</mark>
+                    {word.heard ? <> · heard: <span lang={targetLocale}>{word.heard}</span></> : ' · not recognized'}
+                  </p>
+                ))}
+                <p>{pronunciationResult.tip}</p>
+                <p>{pronunciationResult.toneNote ?? pronunciationResult.note}</p>
+              </section>
+            )}
+            <p className="review-privacy-note">Whisper Tiny transcribes the recording locally in your browser after its model files download. Ari does not upload or persist your audio; an in-memory copy is kept temporarily so you can replay it and is discarded when you leave this card. This approximate text comparison is not a pronunciation score.</p>
           </>
         )}
 
@@ -270,10 +499,10 @@ function ReviewFlow({
           <>
             <span className="review-card-kicker">USE THIS WORD IN A SENTENCE</span>
             <strong className="review-word-prompt">{card.translation}</strong>
-            <p className="review-sentence-target" lang="zh-CN">Target word: {card.word}</p>
+            <p className="review-sentence-target" lang={targetLocale}>Target word: {card.word}</p>
             <label className="review-answer-form">
               <span>Your sentence</span>
-              <textarea rows={2} maxLength={300} value={answer} onChange={(event) => setAnswer(event.target.value)} lang="zh-CN" />
+              <textarea rows={2} maxLength={300} value={answer} onChange={(event) => setAnswer(event.target.value)} lang={targetLocale} />
             </label>
             <p className="review-privacy-note">Check your sentence yourself, then choose how well you remembered the word.</p>
           </>
@@ -286,7 +515,13 @@ function ReviewFlow({
             <span>How well did you remember?</span>
             <div>
               {ratings.map((rating) => (
-                <button className={`review-rating-button rating-${rating.id}`} type="button" key={rating.id} onClick={() => submitRating(rating.id)}>
+                <button
+                  className={`review-rating-button rating-${rating.id}`}
+                  type="button"
+                  key={rating.id}
+                  onClick={() => submitRating(rating.id)}
+                  disabled={isRequestingMicrophone || isCapturing || isTranscribing}
+                >
                   {rating.label}
                 </button>
               ))}
@@ -298,8 +533,8 @@ function ReviewFlow({
   )
 }
 
-export function WarmupReview() {
-  const reviewDeck = useReviewDeck()
+export function WarmupReview({ targetLanguageCode }: { targetLanguageCode: string }) {
+  const reviewDeck = useReviewDeck(targetLanguageCode)
   const remainingToday = Math.max(0, DAILY_REVIEW_LIMIT - reviewDeck.reviewedToday)
   const cards = useMemo(
     () => reviewCardsFor(reviewDeck.cards, Math.min(5, remainingToday), reviewDeck.now),
@@ -325,8 +560,11 @@ export function WarmupReview() {
   )
 }
 
-export default function ReviewDeck() {
-  const reviewDeck = useReviewDeck()
+export default function ReviewDeck({ targetLanguageCode }: { targetLanguageCode: string }) {
+  const targetLanguage = LANGUAGES.find((language) => language.code === targetLanguageCode) ?? LANGUAGES[0]
+  const targetLanguageName = targetLanguage.name
+  const targetLocale = targetLanguage.locale
+  const reviewDeck = useReviewDeck(targetLanguageCode)
   const remainingToday = Math.max(0, DAILY_REVIEW_LIMIT - reviewDeck.reviewedToday)
   const queue = useMemo(
     () => reviewCardsFor(reviewDeck.cards, remainingToday, reviewDeck.now),
@@ -343,8 +581,8 @@ export default function ReviewDeck() {
         <p>Bring words back at the right time, in a quick practice that fits your day.</p>
       </div>
       <div className="review-preview-warning" role="note">
-        <strong>Development preview · unreviewed lesson words</strong>
-        <span>These sample Mandarin translations have not been checked by a qualified reviewer. They are for prototype testing only, not instruction.</span>
+        <strong>Development preview · unreviewed {targetLanguageName} lesson words</strong>
+        <span>These sample {targetLanguageName} translations have not been checked by a qualified reviewer. They are for prototype testing only, not instruction.</span>
       </div>
       {reviewDeck.error && <p className="review-error" role="alert">{reviewDeck.error}</p>}
       <section className="review-overview" aria-label="Review deck summary">
@@ -372,7 +610,7 @@ export default function ReviewDeck() {
           ? <p className="review-error">Your saved cards are unavailable until the storage issue is resolved.</p>
           : reviewDeck.cards.map((card) => (
             <article className="review-library-row" key={card.id}>
-              <div><strong lang="zh-CN">{card.word}</strong>{card.transliteration && <span>{card.transliteration}</span>}</div>
+              <div><strong lang={targetLocale}>{card.word}</strong>{card.transliteration && <span>{card.transliteration}</span>}</div>
               <span>{card.translation}</span>
               <span className={`review-state state-${card.state}`}>{card.state}</span>
             </article>

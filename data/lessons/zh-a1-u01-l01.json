@@ -162,6 +162,40 @@
       "explain_more": "你好 is the greeting. 再见 is the farewell.",
       "hint": "Find the phrase you use when leaving.",
       "options": ["你好 = hello", "再见 = hello", "再见 = goodbye"]
+    },
+    {
+      "id": "l01-reading-goodbye",
+      "type": "reading_comprehension",
+      "skill": ["reading"],
+      "objective_id": "say-goodbye",
+      "difficulty": 1,
+      "prompt": "What does Anna say when she leaves?",
+      "reading_text": "你好！我叫安娜。再见！",
+      "answer_key": "再见！",
+      "accepted_variants": ["再见"],
+      "explanation": "安娜 says 再见 (goodbye) as she leaves.",
+      "explain_more": "Read the final phrase in the short message. The meaning comes from the reviewed lesson vocabulary, not from an AI judgment.",
+      "hint": "Look at the last two characters.",
+      "options": ["你好！", "我叫安娜。", "再见！"]
+    },
+    {
+      "id": "l01-short-writing-greeting",
+      "type": "short_writing",
+      "skill": ["writing"],
+      "objective_id": "greet-someone",
+      "difficulty": 1,
+      "prompt": "Write two short lines in Mandarin: greet someone, then say goodbye.",
+      "answer_key": {
+        "sample_answer": "你好！\n再见！"
+      },
+      "accepted_variants": [],
+      "explanation": "Use your own draft to practise both phrases. The example is only one possible answer.",
+      "explain_more": "Punctuation and line breaks are optional. Compare your draft with the phrases on the lesson cards.",
+      "hint": "Use 你好 for the greeting and 再见 for the farewell.",
+      "success_criteria": [
+        "My draft includes a greeting.",
+        "My draft includes a farewell."
+      ]
     }
   ],
   "roleplay": {

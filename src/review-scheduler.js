@@ -38,7 +38,8 @@ function isValidReviewCard(value) {
     ['new', 'learning', 'review', 'mastered', 'lapsed'].includes(value.state) &&
     ['again', 'hard', 'good', 'easy', null].includes(value.lastResult) &&
     typeof value.source === 'string' &&
-    value.source.trim() !== ''
+    value.source.trim() !== '' &&
+    (value.languageCode === undefined || (typeof value.languageCode === 'string' && value.languageCode.trim() !== ''))
   )
 }
 
@@ -69,6 +70,7 @@ export function createReviewCard(item, now = new Date()) {
     translation: item.translation,
     exampleSentence: typeof item.exampleSentence === 'string' ? item.exampleSentence : '',
     source: item.source,
+    languageCode: item.languageCode ?? 'zh',
     dueAt: now.toISOString(),
     intervalDays: 0,
     ease: 2.5,
@@ -96,9 +98,12 @@ export function addNewReviewItems(cards, items, now = new Date()) {
   return [...cards, ...newCards]
 }
 
-export function addLessonVocabularyToReviewDeck(storage, lessonId, vocabulary, now = new Date()) {
+export function addLessonVocabularyToReviewDeck(storage, lessonId, vocabulary, now = new Date(), languageCode = 'zh') {
   if (typeof lessonId !== 'string' || lessonId.trim() === '' || !Array.isArray(vocabulary)) {
     throw new Error('A lesson ID and vocabulary list are required to add lesson words.')
+  }
+  if (typeof languageCode !== 'string' || languageCode.trim() === '') {
+    throw new Error(`Unsupported review language: ${languageCode}`)
   }
   const cards = readReviewDeck(storage) ?? []
   const items = vocabulary.map((item) => ({
@@ -108,6 +113,7 @@ export function addLessonVocabularyToReviewDeck(storage, lessonId, vocabulary, n
     translation: item.translation_en,
     exampleSentence: item.example_sentence,
     source: lessonId,
+    languageCode,
   }))
   const updated = addNewReviewItems(cards, items, now)
   saveReviewDeck(storage, updated)
@@ -208,6 +214,7 @@ export function readReviewDeck(storage, key = 'ari-review-deck') {
   return parsed.map((card) => ({
     ...card,
     lastReviewedAt: card.lastReviewedAt ?? null,
+    languageCode: card.languageCode ?? 'zh',
   }))
 }
 
@@ -216,4 +223,5 @@ export function saveReviewDeck(storage, cards, key = 'ari-review-deck') {
     throw new Error('Cannot save an invalid review deck.')
   }
   storage.setItem(key, JSON.stringify(cards))
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('ari-progress-updated'))
 }

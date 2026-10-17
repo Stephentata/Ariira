@@ -1,0 +1,38 @@
+[
+  {
+    "id": "cefr-companion",
+    "name": "CEFR Companion Volume",
+    "url": "https://www.coe.int/en/web/common-european-framework-reference-languages",
+    "licence": "Council of Europe publication; consult source terms before redistributing text",
+    "attribution_text": "Council of Europe, Common European Framework of Reference for Languages: Learning, teaching, assessment — Companion volume.",
+    "status": "reference-only",
+    "usage_note": "Use level names and independently written summaries. Do not ingest or reproduce descriptor passages."
+  },
+  {
+    "id": "fsi-courses",
+    "name": "FSI Language Courses",
+    "url": "https://fsi-languages.yojik.eu/",
+    "licence": "Public domain",
+    "attribution_text": "Foreign Service Institute course; cite the course and host page used.",
+    "status": "verify-per-file",
+    "usage_note": "Dated material: use only for lesson structure, drills, and phonology; prefer modern usage from reviewed sources."
+  },
+  {
+    "id": "tatoeba",
+    "name": "Tatoeba",
+    "url": "https://tatoeba.org/en/terms_of_use",
+    "licence": "CC BY 2.0 FR (confirm per sentence and export)",
+    "attribution_text": "Must include sentence author and a direct sentence-page link.",
+    "status": "verify-per-record",
+    "usage_note": "Only proofread/OK sentences pass quality review. Audio requires its own licence and attribution."
+  },
+  {
+    "id": "cc-cedict",
+    "name": "CC-CEDICT",
+    "url": "https://cc-cedict.org/wiki/",
+    "licence": "CC BY-SA (record the exact release licence)",
+    "attribution_text": "CC-CEDICT contributors; retain the release-specific attribution and share-alike notice.",
+    "status": "verify-release",
+    "usage_note": "Keep derivative/combined CC BY-SA data identifiable and share-alike; verify exact current terms before import."
+  }
+]

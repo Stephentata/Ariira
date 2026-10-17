@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Ari & Ira Teaching Knowledge Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id", "language", "level", "section", "skill", "content",
+    "source_name", "source_url", "licence", "attribution_text", "quality_flag"
+  ],
+  "properties": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 180 },
+    "language": { "type": "string", "minLength": 2, "maxLength": 60 },
+    "level": { "enum": ["A0", "A1", "A2", "B1", "B2", "C1", "C2"] },
+    "section": {
+      "enum": ["Beginner", "Life", "Food", "Travel", "Shopping", "Grammar", "Social", "Culture", "Romance", "Health", "Education", "Work", "Entertainment", "Debates", "Pronunciation", "Vocabulary"]
+    },
+    "skill": { "enum": ["speaking", "listening", "grammar", "vocab", "pronunciation"] },
+    "content": { "type": "string", "minLength": 1, "maxLength": 3000 },
+    "source_name": { "type": "string", "minLength": 1, "maxLength": 160 },
+    "source_url": { "type": "string", "format": "uri" },
+    "licence": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "attribution_text": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "quality_flag": { "enum": ["approved", "reference", "unreviewed", "unproofread", "rejected"] },
+    "author": { "type": "string", "maxLength": 120 },
+    "sentence_url": { "type": "string", "format": "uri" },
+    "audio_url": { "type": "string", "format": "uri" },
+    "audio_licence": { "type": "string", "maxLength": 120 },
+    "audio_attribution_text": { "type": "string", "maxLength": 500 },
+    "notes": { "type": "string", "maxLength": 500 },
+    "proofread_status": { "enum": ["OK", "unproofread", "unknown"] },
+    "naturalness_review": { "enum": ["approved", "unreviewed", "rejected"] }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "source_name": { "const": "Tatoeba" } }, "required": ["source_name"] },
+      "then": {
+        "properties": {
+          "author": { "type": "string" },
+          "sentence_url": { "type": "string" },
+          "proofread_status": {},
+          "naturalness_review": {}
+        },
+        "required": ["author", "sentence_url", "proofread_status", "naturalness_review"]
+      }
+    },
+    {
+      "if": { "properties": { "audio_url": { "type": "string" } }, "required": ["audio_url"] },
+      "then": {
+        "properties": {
+          "audio_licence": { "type": "string" },
+          "audio_attribution_text": { "type": "string" }
+        },
+        "required": ["audio_licence", "audio_attribution_text"]
+      }
+    }
+  ]
+}

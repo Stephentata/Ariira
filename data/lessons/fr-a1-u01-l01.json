@@ -1,0 +1,151 @@
+{
+  "id": "fr-a1-u01-l01",
+  "language": "fr",
+  "native_language": "en",
+  "level": "A1",
+  "unit": "greetings-introductions",
+  "title": "Bonjour et au revoir",
+  "objectives": ["greet-someone", "say-goodbye"],
+  "vocabulary": [
+    {
+      "id": "fr-bonjour",
+      "text": "Bonjour",
+      "transliteration": "approx. bon-zhoor",
+      "translation_en": "hello; good morning",
+      "audio": null,
+      "image": null,
+      "example_sentence": "Bonjour !"
+    },
+    {
+      "id": "fr-salut",
+      "text": "Salut",
+      "transliteration": "approx. sah-loo",
+      "translation_en": "hi; bye (informal)",
+      "audio": null,
+      "image": null,
+      "example_sentence": "Salut, Camille !"
+    },
+    {
+      "id": "fr-au-revoir",
+      "text": "Au revoir",
+      "transliteration": "approx. oh ruh-vwahr",
+      "translation_en": "goodbye",
+      "audio": null,
+      "image": null,
+      "example_sentence": "Au revoir !"
+    }
+  ],
+  "grammar_point": null,
+  "dialogues": [
+    {
+      "id": "bonjour-au-revoir",
+      "lines": [
+        { "speaker": "A", "text": "Bonjour !", "translation_en": "Hello!" },
+        { "speaker": "B", "text": "Salut !", "translation_en": "Hi!" },
+        { "speaker": "A", "text": "Au revoir !", "translation_en": "Goodbye!" }
+      ]
+    }
+  ],
+  "exercises": [
+    {
+      "id": "fr-l01-meaning-bonjour",
+      "type": "multiple_choice",
+      "skill": ["reading", "vocabulary"],
+      "objective_id": "greet-someone",
+      "difficulty": 1,
+      "prompt": "What does Bonjour mean here?",
+      "answer_key": "hello",
+      "accepted_variants": ["good morning"],
+      "explanation": "Bonjour is a common greeting, often used during the day.",
+      "hint": "You can say this when you meet someone.",
+      "options": ["hello", "goodbye", "thank you"]
+    },
+    {
+      "id": "fr-l01-listen-salut",
+      "type": "listen_and_choose",
+      "skill": ["listening", "vocabulary"],
+      "objective_id": "greet-someone",
+      "difficulty": 1,
+      "prompt": "Listen to the greeting. What does it mean?",
+      "listen_text": "Salut !",
+      "answer_key": "hi",
+      "accepted_variants": ["hello"],
+      "explanation": "Salut is an informal way to say hi; it can also mean bye.",
+      "hint": "This is an informal greeting.",
+      "options": ["hi", "goodbye", "please"]
+    },
+    {
+      "id": "fr-l01-translate-farewell",
+      "type": "translate_native_to_target",
+      "skill": ["writing", "vocabulary"],
+      "objective_id": "say-goodbye",
+      "difficulty": 1,
+      "prompt": "Translate into French: Goodbye!",
+      "answer_key": "Au revoir !",
+      "accepted_variants": ["Au revoir"],
+      "explanation": "Au revoir is a common way to say goodbye.",
+      "hint": "The phrase has two words."
+    },
+    {
+      "id": "fr-l01-reading-greeting",
+      "type": "reading_comprehension",
+      "skill": ["reading"],
+      "objective_id": "greet-someone",
+      "difficulty": 1,
+      "prompt": "Which greeting does Camille use when she arrives?",
+      "reading_text": "Camille arrive. Elle dit : « Bonjour ! »",
+      "answer_key": "Bonjour !",
+      "accepted_variants": ["Bonjour"],
+      "explanation": "Camille says Bonjour when she arrives.",
+      "hint": "Look at the greeting in quotation marks.",
+      "options": ["Bonjour !", "Au revoir !", "Merci !"]
+    },
+    {
+      "id": "fr-l01-short-writing",
+      "type": "short_writing",
+      "skill": ["writing", "vocabulary"],
+      "objective_id": "greet-someone",
+      "difficulty": 1,
+      "prompt": "Write two short lines in French: greet someone, then say goodbye.",
+      "answer_key": {
+        "sample_answer": "Bonjour !\nAu revoir !"
+      },
+      "accepted_variants": [],
+      "explanation": "Use your own draft to practise a greeting and a farewell. The example is only one possible answer.",
+      "hint": "Use Bonjour to greet someone and Au revoir to say goodbye.",
+      "success_criteria": [
+        "My draft includes a greeting.",
+        "My draft includes a farewell."
+      ]
+    }
+  ],
+  "roleplay": {
+    "id": "meet-someone-fr-a1",
+    "level": "A1",
+    "title": "Say hello and goodbye",
+    "goal": "Greet someone and say goodbye using the phrases from this sample.",
+    "success_criteria": ["Uses a greeting", "Uses a farewell"],
+    "useful_phrases": []
+  },
+  "whiteboard_cards": [
+    {
+      "id": "fr-bonjour-card",
+      "type": "vocab_card",
+      "title": "Hello",
+      "word": "Bonjour",
+      "transliteration": "approx. bon-zhoor",
+      "translation": "hello; good morning",
+      "example_sentence": "Bonjour !"
+    },
+    {
+      "id": "fr-au-revoir-card",
+      "type": "vocab_card",
+      "title": "Goodbye",
+      "word": "Au revoir",
+      "transliteration": "approx. oh ruh-vwahr",
+      "translation": "goodbye",
+      "example_sentence": "Au revoir !"
+    }
+  ],
+  "reviewed": false
+}

@@ -7,21 +7,50 @@ import {
   createExerciseResponse,
   formatExpectedAnswer,
   isClosedExercise,
+  isShortWritingExercise,
 } from '../src/exercise-checker.js'
 
 const validateLesson = await createLessonValidator()
 const lessons = await readLessonFiles()
-const exercises = lessons.flatMap(({ lesson }) => lesson.exercises)
+const mandarinLesson = lessons.find(({ lesson }) => lesson.id === 'zh-a1-u01-l01')?.lesson
+const frenchLesson = lessons.find(({ lesson }) => lesson.id === 'fr-a1-u01-l01')?.lesson
+assert.ok(mandarinLesson)
+assert.ok(frenchLesson)
+const exercises = mandarinLesson.exercises
 
-test('starter lesson provides schema-valid examples of all nine closed exercise types', () => {
+test('starter lesson provides schema-valid examples of all ten closed exercise types', () => {
   const starterLesson = lessons.find(({ lesson }) => lesson.id === 'zh-a1-u01-l01')?.lesson
   assert.ok(starterLesson)
   assert.equal(validateLesson(starterLesson), true, JSON.stringify(validateLesson.errors))
   assert.deepEqual(
-    [...new Set(starterLesson.exercises.map(({ type }) => type))].sort(),
+    [...new Set(starterLesson.exercises.filter(isClosedExercise).map(({ type }) => type))].sort(),
     [...CLOSED_EXERCISE_TYPES].sort(),
   )
-  assert.ok(starterLesson.exercises.every(isClosedExercise))
+  assert.ok(starterLesson.exercises.filter(({ type }) => type !== 'short_writing').every(isClosedExercise))
+})
+
+test('reading comprehension uses its passage and fixed lesson answer; writing stays self-reviewed', () => {
+  const reading = exercises.find(({ type }) => type === 'reading_comprehension')
+  const writing = exercises.find(({ type }) => type === 'short_writing')
+  assert.ok(reading)
+  assert.ok(writing)
+  assert.equal(isClosedExercise(reading), true)
+  assert.equal(checkClosedExerciseAnswer(reading, '再见'), true)
+  assert.equal(checkClosedExerciseAnswer(reading, '你好'), false)
+  assert.equal(isClosedExercise({ ...reading, reading_text: '' }), false)
+  assert.equal(isShortWritingExercise(writing), true)
+  assert.equal(isShortWritingExercise({ ...writing, success_criteria: [] }), false)
+})
+
+test('French sample reading and translations use their fixed answer keys', () => {
+  const reading = frenchLesson.exercises.find(({ type }) => type === 'reading_comprehension')
+  const farewell = frenchLesson.exercises.find(({ type }) => type === 'translate_native_to_target')
+  assert.ok(reading)
+  assert.ok(farewell)
+  assert.equal(checkClosedExerciseAnswer(reading, 'Bonjour'), true)
+  assert.equal(checkClosedExerciseAnswer(reading, 'Au revoir'), false)
+  assert.equal(checkClosedExerciseAnswer(farewell, 'Au revoir'), true)
+  assert.equal(checkClosedExerciseAnswer(farewell, 'Bonjour'), false)
 })
 
 test('multiple choice, listening choice, and spot-the-mistake use only the fixed answer key', () => {
@@ -100,6 +129,12 @@ test('schema rejects missing listening text and unsupported answer-key shapes', 
   assert.notEqual(sentenceIndex, -1)
   invalidSentenceAnswer.exercises[sentenceIndex].answer_key = ['再', '见']
   assert.equal(validateLesson(invalidSentenceAnswer), false)
+
+  const invalidReadingPassage = JSON.parse(JSON.stringify(starterLesson))
+  const readingIndex = invalidReadingPassage.exercises.findIndex(({ type }) => type === 'reading_comprehension')
+  assert.notEqual(readingIndex, -1)
+  delete invalidReadingPassage.exercises[readingIndex].reading_text
+  assert.equal(validateLesson(invalidReadingPassage), false)
 })
 
 test('choice options must contain a correct answer before an exercise can render', () => {

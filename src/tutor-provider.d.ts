@@ -38,6 +38,14 @@ export type TutorProfile = {
   grammarPoint: string
   errorProfile: string
   memorySummary: string
+  tutorMode?: 'soft' | 'balanced' | 'strict'
+  openingPhase?: 'welcome' | 'teaching'
+  freeChat?: boolean
+  roleplay?: {
+    title: string
+    goal: string
+    successCriteria: string[]
+  }
 }
 export type LLMChatMessage = { role: 'system' | 'assistant' | 'user'; content: string }
 export type LLMProvider = {
@@ -60,7 +68,7 @@ export function getTargetLanguageRatio(level: TutorLevel): number
 export function getLanguageRatio(text: string): number
 export function getTutorResponseLanguageRatio(value: unknown): number
 export function countTutorSentences(text: string): number
-export function validateTutorResponse(value: unknown, level?: TutorLevel): TutorReply
+export function validateTutorResponse(value: unknown, level?: TutorLevel, targetLanguageCode?: string, maxSentences?: number): TutorReply
 export function buildTutorSystemPrompt(profile?: TutorProfile): string
 export function buildTutorMessages(history: TutorHistoryMessage[], profile?: TutorProfile): LLMChatMessage[]
 export function requestStructuredTutorReply(

@@ -1,23 +1,31 @@
 import { useState, type FormEvent } from 'react'
+import { getTutorSpeechGender } from './speech-options.js'
+import { readLearnerSettings } from './learner-data.js'
+import { playSpeechAudio } from './speech-playback.js'
 import {
   checkClosedExerciseAnswer,
   createExerciseResponse,
   formatExpectedAnswer,
   type ClosedExercise,
+  type LessonExercise,
+  type ShortWritingExercise,
 } from './exercise-checker.js'
 
 type Props = {
-  exercise: ClosedExercise
+  exercise: LessonExercise
   index: number
   total: number
+  targetLocale: string
+  targetLanguageName: string
+  onAttempt: (correct: boolean) => void
   onComplete: () => void
 }
 
-function usesChoiceButtons(type: ClosedExercise['type']) {
-  return type === 'multiple_choice' || type === 'listen_and_choose' || type === 'spot_mistake'
+function usesChoiceButtons(type: ClosedExercise['type'] | ShortWritingExercise['type']) {
+  return type === 'multiple_choice' || type === 'listen_and_choose' || type === 'spot_mistake' || type === 'reading_comprehension'
 }
 
-function usesTextInput(type: ClosedExercise['type']) {
+function usesTextInput(type: ClosedExercise['type'] | ShortWritingExercise['type']) {
   return (
     type === 'listen_and_type' ||
     type === 'fill_blank' ||
@@ -26,7 +34,7 @@ function usesTextInput(type: ClosedExercise['type']) {
   )
 }
 
-export default function ExercisePlayer({ exercise, index, total, onComplete }: Props) {
+export default function ExercisePlayer({ exercise, index, total, targetLocale, targetLanguageName, onAttempt, onComplete }: Props) {
   const [answer, setAnswer] = useState('')
   const [selectedBlocks, setSelectedBlocks] = useState<number[]>([])
   const [pairAnswers, setPairAnswers] = useState<Record<string, string>>({})
@@ -35,18 +43,28 @@ export default function ExercisePlayer({ exercise, index, total, onComplete }: P
   const [feedback, setFeedback] = useState<{ correct: boolean; message: string } | null>(null)
   const [interactionError, setInteractionError] = useState('')
   const [speechNotice, setSpeechNotice] = useState('')
-  const choices = exercise.options ?? []
-  const matchPairs = typeof exercise.answer_key === 'object' ? Object.entries(exercise.answer_key) : []
+  const [writingSubmitted, setWritingSubmitted] = useState(false)
+  const choices = 'options' in exercise ? exercise.options ?? [] : []
+  const matchPairs = exercise.type === 'match_pairs' ? Object.entries(exercise.answer_key) : []
   const allPairsAnswered = matchPairs.length > 0 && matchPairs.every(([target]) => pairAnswers[target])
 
   function submitAnswer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setInteractionError('')
+    if (exercise.type === 'short_writing') {
+      if (!answer.trim()) {
+        setInteractionError('Write a draft before reviewing it.')
+        return
+      }
+      setWritingSubmitted(true)
+      return
+    }
     try {
       const response = exercise.type === 'match_pairs'
         ? createExerciseResponse(exercise, pairAnswers)
         : createExerciseResponse(exercise, answer)
       const correct = checkClosedExerciseAnswer(exercise, response)
+      onAttempt(correct)
       setFeedback({
         correct,
         message: correct ? 'Correct — nicely done.' : `Not quite. The answer is: ${formatExpectedAnswer(exercise)}`,
@@ -72,26 +90,19 @@ export default function ExercisePlayer({ exercise, index, total, onComplete }: P
     setFeedback(null)
   }
 
-  function playListeningPrompt() {
-    if (!exercise.listen_text) {
+  async function playListeningPrompt() {
+    if (!('listen_text' in exercise) || !exercise.listen_text) {
       setSpeechNotice('This exercise does not include a listening prompt.')
       return
     }
-    if (!('speechSynthesis' in window)) {
-      setSpeechNotice('Audio playback is not available in this browser. You can still complete the text exercise.')
-      return
-    }
-
     try {
-      window.speechSynthesis.cancel()
-      const utterance = new SpeechSynthesisUtterance(exercise.listen_text)
-      utterance.lang = 'zh-CN'
-      utterance.onerror = () => setSpeechNotice('Your browser could not play this prompt. You can still complete it in text.')
-      utterance.onend = () => setSpeechNotice('')
-      setSpeechNotice('Playing with your browser’s available voice. This is not a recording.')
-      window.speechSynthesis.speak(utterance)
+      setSpeechNotice('Generating speech locally with Ari’s voice service…')
+      const tutorName = readLearnerSettings(window.localStorage).tutorName
+      await playSpeechAudio(exercise.listen_text, targetLocale, getTutorSpeechGender(tutorName))
+      setSpeechNotice('')
     } catch (error) {
-      setSpeechNotice(error instanceof Error ? `Audio playback failed: ${error.message}` : 'Audio playback failed.')
+      if (error instanceof DOMException && error.name === 'AbortError') return
+      setSpeechNotice(error instanceof Error ? `Voice playback failed: ${error.message}` : 'Voice playback failed.')
     }
   }
 
@@ -109,6 +120,9 @@ export default function ExercisePlayer({ exercise, index, total, onComplete }: P
       </div>
       <h3 id={`exercise-title-${exercise.id}`}>{exercise.prompt}</h3>
 
+      {exercise.type === 'reading_comprehension' && (
+        <blockquote className="exercise-reading-passage" lang={targetLocale}>{exercise.reading_text}</blockquote>
+      )}
       {(exercise.type === 'listen_and_choose' || exercise.type === 'listen_and_type') && (
         <div className="exercise-listen-control">
           <button className="button button-outline" type="button" onClick={playListeningPrompt}>▶ Hear prompt</button>
@@ -117,7 +131,7 @@ export default function ExercisePlayer({ exercise, index, total, onComplete }: P
       )}
       {speechNotice && <p className="exercise-speech-notice" role="status">{speechNotice}</p>}
 
-      {!feedback && (
+      {!feedback && !writingSubmitted && (
         <form className="exercise-answer-form" onSubmit={submitAnswer}>
           {usesChoiceButtons(exercise.type) && (
             <fieldset className="exercise-choices">
@@ -146,7 +160,22 @@ export default function ExercisePlayer({ exercise, index, total, onComplete }: P
                 value={answer}
                 onChange={(event) => updateAnswer(event.target.value)}
                 placeholder={exercise.type === 'fill_blank' ? 'Type the missing word…' : 'Type your answer…'}
-                lang={exercise.type === 'translate_target_to_native' ? 'en' : 'zh-CN'}
+                lang={exercise.type === 'translate_target_to_native' ? 'en' : targetLocale}
+                autoComplete="off"
+              />
+            </label>
+          )}
+
+          {exercise.type === 'short_writing' && (
+            <label className="exercise-text-answer exercise-writing-answer">
+              <span>Your {targetLanguageName} draft</span>
+              <textarea
+                maxLength={500}
+                rows={4}
+                value={answer}
+                onChange={(event) => updateAnswer(event.target.value)}
+                placeholder="Write your own version…"
+                lang={targetLocale}
                 autoComplete="off"
               />
             </label>
@@ -154,7 +183,7 @@ export default function ExercisePlayer({ exercise, index, total, onComplete }: P
 
           {exercise.type === 'sentence_building' && (
             <div className="exercise-sentence-builder">
-              <div className="exercise-built-sentence" aria-live="polite" lang="zh-CN">
+              <div className="exercise-built-sentence" aria-live="polite" lang={targetLocale}>
                 {answer || <span>Tap the blocks to build a sentence…</span>}
               </div>
               <div className="exercise-word-blocks" aria-label="Available word blocks">
@@ -164,7 +193,7 @@ export default function ExercisePlayer({ exercise, index, total, onComplete }: P
                     key={`${block}-${blockIndex}`}
                     disabled={selectedBlocks.includes(blockIndex)}
                     onClick={() => selectBlock(blockIndex)}
-                    lang="zh-CN"
+                    lang={targetLocale}
                   >
                     {block}
                   </button>
@@ -178,7 +207,7 @@ export default function ExercisePlayer({ exercise, index, total, onComplete }: P
             <div className="exercise-match-list">
               {matchPairs.map(([target], pairIndex) => (
                 <label className="exercise-match-row" key={target}>
-                  <span lang="zh-CN">{target}</span>
+                  <span lang={targetLocale}>{target}</span>
                   <span aria-hidden="true">→</span>
                   <select
                     aria-label={`Meaning for ${target}`}
@@ -206,19 +235,43 @@ export default function ExercisePlayer({ exercise, index, total, onComplete }: P
               className="button button-dark"
               type="submit"
               disabled={
-                (usesChoiceButtons(exercise.type) && !answer) ||
-                (usesTextInput(exercise.type) && !answer.trim()) ||
+                (exercise.type !== 'short_writing' && usesChoiceButtons(exercise.type) && !answer) ||
+                (exercise.type !== 'short_writing' && usesTextInput(exercise.type) && !answer.trim()) ||
+                (exercise.type === 'short_writing' && !answer.trim()) ||
                 (exercise.type === 'sentence_building' && !answer) ||
                 (exercise.type === 'match_pairs' && !allPairsAnswered)
               }
             >
-              Check answer
+              {exercise.type === 'short_writing' ? 'Review my draft' : 'Check answer'}
             </button>
           </div>
         </form>
       )}
 
       {interactionError && <p className="exercise-interaction-error" role="alert">{interactionError}</p>}
+
+      {exercise.type === 'short_writing' && writingSubmitted && (
+        <section className="exercise-writing-review" aria-label="Writing self-review">
+          <p><strong>Your draft</strong></p>
+          <p className="exercise-writing-draft" lang={targetLocale}>{answer}</p>
+          <p>{exercise.explanation}</p>
+          <fieldset>
+            <legend>Reflect on your draft (optional)</legend>
+            {exercise.success_criteria.map((criterion) => (
+              <label key={criterion}>
+                <input type="checkbox" />
+                <span>{criterion}</span>
+              </label>
+            ))}
+          </fieldset>
+          <details>
+            <summary>See one possible example</summary>
+            <p className="exercise-writing-draft" lang={targetLocale}>{exercise.answer_key.sample_answer}</p>
+          </details>
+          <p className="exercise-writing-note">Your writing is not automatically scored and does not change your level or progress.</p>
+          <button className="button button-dark" type="button" onClick={onComplete}>Continue →</button>
+        </section>
+      )}
 
       {feedback && (
         <div className={`exercise-feedback ${feedback.correct ? 'is-correct' : 'is-incorrect'}`} role="status" aria-live="polite">

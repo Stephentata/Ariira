@@ -1,17 +1,51 @@
 :root {
-  --ink: #373933;
-  --muted: #a19d93;
-  --line: #eae6de;
-  --peach: #f3e3d5;
+  --ari-deep: #04222b;
+  --ari-dark-teal: #0a3d4a;
+  --ari-teal: #10686f;
+  --ari-primary: #1d8b94;
+  --ari-aqua: #4fb8b4;
+  --ari-mint: #98d8d0;
+  --ari-light: #e2f4f0;
+  --ink: var(--ari-deep);
+  --muted: var(--ari-teal);
+  --line: var(--ari-mint);
+  --peach: var(--ari-light);
+  --page-bg: var(--ari-light);
+  --surface: #ffffff;
+  --surface-soft: var(--ari-light);
+  --text-main: var(--ari-dark-teal);
+  --text-strong: var(--ari-deep);
+  --text-muted: var(--ari-teal);
+  --accent: var(--ari-primary);
+  --accent-deep: var(--ari-teal);
+  --accent-soft: var(--ari-light);
+  --accent-line: var(--ari-mint);
   --sans: 'DM Sans', 'Segoe UI', sans-serif;
   --display: 'Manrope', 'Segoe UI', sans-serif;
   font-family: var(--sans);
   color: var(--ink);
-  background: #fbfaf6;
+  background: var(--page-bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.app-shell[data-theme='dark'] {
+  --ink: var(--ari-light);
+  --muted: var(--ari-mint);
+  --line: var(--ari-teal);
+  --peach: var(--ari-dark-teal);
+  --page-bg: var(--ari-deep);
+  --surface: var(--ari-dark-teal);
+  --surface-soft: var(--ari-teal);
+  --text-main: var(--ari-light);
+  --text-strong: var(--ari-light);
+  --text-muted: var(--ari-mint);
+  --accent: var(--ari-aqua);
+  --accent-deep: var(--ari-mint);
+  --accent-soft: var(--ari-dark-teal);
+  --accent-line: var(--ari-teal);
 }
 
 * {
@@ -22,6 +56,12 @@ body {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
+}
+
+@media (max-width: 320px) {
+  body {
+    min-width: 0;
+  }
 }
 
 button,
@@ -35,11 +75,11 @@ button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
-  outline: 2px solid #b58a66;
+  outline: 2px solid var(--ari-aqua);
   outline-offset: 2px;
 }
 
 ::selection {
-  background: #ead8c7;
-  color: #373933;
+  background: var(--ari-mint);
+  color: var(--ari-deep);
 }

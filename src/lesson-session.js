@@ -93,15 +93,23 @@ export function saveLessonSession(storage, session) {
   storage.setItem(`ari-lesson-session:${session.lessonId}`, JSON.stringify(session))
 }
 
-export function createMockTutorReply(stageId, learnerText) {
+export function createMockTutorReply(stageId, learnerText, languageCode = 'zh') {
   if (typeof learnerText !== 'string' || learnerText.trim() === '') {
     throw new Error('Write a response before asking Ira for feedback.')
   }
 
-  const replies = {
-    warmup: 'Thanks for giving that a try. We’ll explore the words together on the whiteboard.',
-    roleplay: 'I’m following along. Let’s keep the conversation going one small phrase at a time.',
+  const repliesByLanguage = {
+    zh: {
+      warmup: 'Thanks for giving that a try. We’ll explore the words together on the whiteboard.',
+      roleplay: 'I’m following along. Let’s keep the conversation going one small phrase at a time.',
+    },
+    fr: {
+      warmup: 'Merci d’avoir essayé. Découvrons les mots ensemble.',
+      roleplay: 'Je vous écoute. Continuons avec une petite phrase à la fois.',
+    },
   }
+  const replies = repliesByLanguage[languageCode]
+  if (!replies) throw new Error(`The mock tutor does not support the "${languageCode}" language.`)
   const reply = replies[stageId]
   if (!reply) throw new Error(`The mock tutor does not support the "${stageId}" stage.`)
   return reply

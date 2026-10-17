@@ -8,6 +8,7 @@ export const CLOSED_EXERCISE_TYPES = Object.freeze([
   'translate_target_to_native',
   'match_pairs',
   'spot_mistake',
+  'reading_comprehension',
 ])
 
 function normalizeText(value) {
@@ -71,7 +72,8 @@ export function isClosedExercise(value) {
   if (
     exercise.type === 'multiple_choice' ||
     exercise.type === 'listen_and_choose' ||
-    exercise.type === 'spot_mistake'
+    exercise.type === 'spot_mistake' ||
+    exercise.type === 'reading_comprehension'
   ) {
     return (
       Array.isArray(exercise.options) &&
@@ -80,6 +82,9 @@ export function isClosedExercise(value) {
       exercise.options.includes(exercise.answer_key) &&
       (exercise.type !== 'listen_and_choose' || (
         typeof exercise.listen_text === 'string' && exercise.listen_text.trim() !== ''
+      )) &&
+      (exercise.type !== 'reading_comprehension' || (
+        typeof exercise.reading_text === 'string' && exercise.reading_text.trim() !== ''
       ))
     )
   }
@@ -93,6 +98,31 @@ export function isClosedExercise(value) {
     )
   }
   return true
+}
+
+export function isShortWritingExercise(value) {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const exercise = value
+  return (
+    typeof exercise.id === 'string' &&
+    exercise.type === 'short_writing' &&
+    Array.isArray(exercise.skill) &&
+    exercise.skill.includes('writing') &&
+    typeof exercise.objective_id === 'string' &&
+    typeof exercise.prompt === 'string' &&
+    typeof exercise.answer_key === 'object' &&
+    exercise.answer_key !== null &&
+    !Array.isArray(exercise.answer_key) &&
+    typeof exercise.answer_key.sample_answer === 'string' &&
+    exercise.answer_key.sample_answer.trim() !== '' &&
+    Array.isArray(exercise.accepted_variants) &&
+    exercise.accepted_variants.every((variant) => typeof variant === 'string') &&
+    typeof exercise.explanation === 'string' &&
+    typeof exercise.hint === 'string' &&
+    Array.isArray(exercise.success_criteria) &&
+    exercise.success_criteria.length > 0 &&
+    exercise.success_criteria.every((criterion) => typeof criterion === 'string' && criterion.trim() !== '')
+  )
 }
 
 export function checkClosedExerciseAnswer(exercise, response) {
@@ -137,7 +167,8 @@ export function createExerciseResponse(exercise, response) {
   if (
     exercise.type === 'multiple_choice' ||
     exercise.type === 'listen_and_choose' ||
-    exercise.type === 'spot_mistake'
+    exercise.type === 'spot_mistake' ||
+    exercise.type === 'reading_comprehension'
   ) {
     if (!exercise.options.includes(response)) {
       throw new Error('Choose one of the available options.')

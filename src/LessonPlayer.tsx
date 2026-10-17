@@ -1,7 +1,10 @@
 import { lazy, Suspense, useState, type FormEvent } from 'react'
-import starterLesson from '../data/lessons/zh-a1-u01-l01.json'
+import frenchLesson from '../data/lessons/fr-a1-u01-l01.json'
+import mandarinLesson from '../data/lessons/zh-a1-u01-l01.json'
 import ExercisePlayer from './ExercisePlayer'
-import { isClosedExercise, type ClosedExercise } from './exercise-checker.js'
+import { isClosedExercise, isShortWritingExercise, type LessonExercise } from './exercise-checker.js'
+import { recordExerciseAttempt, recordLessonCompleted } from './learning-progress.js'
+import { createLessonRoleplayScenario } from './roleplay-scenarios.js'
 import { addLessonVocabularyToReviewDeck } from './review-scheduler.js'
 import {
   advanceLessonSession,
@@ -23,22 +26,50 @@ type WhiteboardCard =
   | { id: string; type: 'tone_or_sound_card'; title: string; sound: string; tip: string; contour?: string }
   | { id: string; type: 'word_order_card'; title: string; blocks: string[]; answer: string }
   | { id: string; type: 'summary_card'; title: string; takeaways: string[] }
-type Props = { onExit: () => void }
+type LessonData = {
+  id: string
+  language: string
+  level: string
+  title: string
+  objectives: string[]
+  vocabulary: Array<{
+    id: string
+    text: string
+    transliteration?: string
+    translation_en: string
+    example_sentence?: string
+  }>
+  exercises: unknown[]
+  roleplay: {
+    id: string
+    level: string
+    title: string
+    goal: string
+    success_criteria: string[]
+    useful_phrases: Array<{ text: string; transliteration?: string; translation: string }>
+  }
+  grammar_point?: string | { explanation_en: string } | null
+  whiteboard_cards: unknown[]
+}
+type Props = {
+  onExit: () => void
+  onReviewWords: () => void
+  onStartRoleplay: (scenario: ReturnType<typeof createLessonRoleplayScenario>) => void
+  targetLanguageCode: 'zh' | 'fr'
+}
 type Turn = { role: 'learner' | 'ira'; text: string }
 const WarmupReview = lazy(() => import('./ReviewDeck').then((module) => ({ default: module.WarmupReview })))
 
-function getClosedExercises(): ClosedExercise[] {
-  const serialized: unknown = JSON.parse(JSON.stringify(starterLesson.exercises))
+function getLessonExercises(lesson: LessonData): LessonExercise[] {
+  const serialized: unknown = JSON.parse(JSON.stringify(lesson.exercises))
   if (!Array.isArray(serialized)) throw new Error('The lesson exercises must be a list.')
   return serialized.map((exercise, index) => {
-    if (!isClosedExercise(exercise)) {
-      throw new Error(`Exercise ${index + 1} is invalid or is not a code-checked exercise.`)
+    if (!isClosedExercise(exercise) && !isShortWritingExercise(exercise)) {
+      throw new Error(`Exercise ${index + 1} is invalid or uses an unsupported exercise type.`)
     }
     return exercise
   })
 }
-
-const closedExercises = getClosedExercises()
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -121,21 +152,19 @@ function parseWhiteboardCard(value: unknown, index: number): WhiteboardCard {
   throw new Error(`Whiteboard card ${index + 1} has an unsupported or incomplete card type.`)
 }
 
-function getWhiteboardCards(): WhiteboardCard[] {
-  const serialized: unknown = JSON.parse(JSON.stringify(starterLesson.whiteboard_cards))
+function getWhiteboardCards(lesson: LessonData): WhiteboardCard[] {
+  const serialized: unknown = JSON.parse(JSON.stringify(lesson.whiteboard_cards))
   if (!Array.isArray(serialized)) throw new Error('The lesson whiteboard cards must be a list.')
   return serialized.map(parseWhiteboardCard)
 }
 
-const whiteboardCards = getWhiteboardCards()
-
-function getInitialSession(): { session: LessonSession; error: string } {
+function getInitialSession(lesson: LessonData, languageCode: 'zh' | 'fr'): { session: LessonSession; error: string } {
   try {
-    const session = loadLessonSession(window.localStorage, starterLesson.id) ?? createLessonSession(starterLesson.id)
+    const session = loadLessonSession(window.localStorage, lesson.id) ?? createLessonSession(lesson.id)
     let error = ''
     if (LESSON_STAGES[session.stageIndex].id === 'teach') {
       try {
-        addLessonVocabularyToReviewDeck(window.localStorage, starterLesson.id, starterLesson.vocabulary)
+        addLessonVocabularyToReviewDeck(window.localStorage, lesson.id, lesson.vocabulary, new Date(), languageCode)
       } catch (reviewError) {
         error = reviewError instanceof Error ? reviewError.message : 'Could not add lesson words to your review deck.'
       }
@@ -146,21 +175,21 @@ function getInitialSession(): { session: LessonSession; error: string } {
     }
   } catch (error) {
     return {
-      session: createLessonSession(starterLesson.id),
+      session: createLessonSession(lesson.id),
       error: error instanceof Error ? error.message : 'Could not read saved lesson progress.',
     }
   }
 }
 
-function Whiteboard({ card }: { card: WhiteboardCard }) {
+function Whiteboard({ card, targetLocale }: { card: WhiteboardCard; targetLocale: string }) {
   if (card.type === 'vocab_card') {
     return (
       <article className="lesson-whiteboard-card">
         <span className="lesson-card-kind">NEW WORD</span>
-        <h3 lang="zh-CN">{card.word}</h3>
+        <h3 lang={targetLocale}>{card.word}</h3>
         <p className="lesson-card-pronunciation">{card.transliteration}</p>
         <p className="lesson-card-translation">{card.translation}</p>
-        <div className="lesson-card-example"><span>EXAMPLE</span><p lang="zh-CN">{card.example_sentence}</p></div>
+        <div className="lesson-card-example"><span>EXAMPLE</span><p lang={targetLocale}>{card.example_sentence}</p></div>
       </article>
     )
   }
@@ -184,7 +213,7 @@ function Whiteboard({ card }: { card: WhiteboardCard }) {
         <h3>{card.title}</h3>
         {card.lines.map((line, index) => (
           <p className="lesson-dialogue-line" key={`${line.speaker}-${index}`}>
-            <strong>{line.speaker}</strong><span lang="zh-CN">{line.text}</span>
+            <strong>{line.speaker}</strong><span lang={targetLocale}>{line.text}</span>
             {line.transliteration && <small>{line.transliteration}</small>}
             {line.translation && <small>{line.translation}</small>}
           </p>
@@ -223,32 +252,47 @@ function Whiteboard({ card }: { card: WhiteboardCard }) {
   )
 }
 
-function stagePrompt(stageId: LessonStageId) {
-  if (stageId === 'warmup') return 'Before we begin, how would you greet someone in Mandarin? A guess is welcome.'
+function stagePrompt(stageId: LessonStageId, targetLanguageName: string) {
+  if (stageId === 'warmup') return `Before we begin, how would you greet someone in ${targetLanguageName}? A guess is welcome.`
   if (stageId === 'roleplay') return 'Imagine meeting someone new. Write a greeting you would use to start.'
   return ''
 }
 
-export default function LessonPlayer({ onExit }: Props) {
-  const [initial] = useState(getInitialSession)
+export default function LessonPlayer({ onExit, onReviewWords, onStartRoleplay, targetLanguageCode }: Props) {
+  const starterLesson: LessonData = targetLanguageCode === 'fr' ? frenchLesson : mandarinLesson
+  const targetLanguageName = targetLanguageCode === 'fr' ? 'French' : 'Mandarin'
+  const targetLocale = targetLanguageCode === 'fr' ? 'fr-FR' : 'zh-CN'
+  const [lessonExercises] = useState(() => getLessonExercises(starterLesson))
+  const [whiteboardCards] = useState(() => getWhiteboardCards(starterLesson))
+  const [initial] = useState(() => getInitialSession(starterLesson, targetLanguageCode))
   const [session, setSession] = useState(initial.session)
   const [storageError, setStorageError] = useState(initial.error)
   const [learnerInput, setLearnerInput] = useState('')
   const [turns, setTurns] = useState<Turn[]>([])
   const currentStage = LESSON_STAGES[session.stageIndex]
   const completedStages = session.status === 'completed' ? LESSON_STAGES.length : session.stageIndex
-  const practiceComplete = session.exerciseIndex >= closedExercises.length
+  const practiceComplete = session.exerciseIndex >= lessonExercises.length
+  const codeCheckedExerciseCount = lessonExercises.filter(isClosedExercise).length
 
   function changeStage(nextSession: LessonSession) {
     let errorMessage = ''
+    let sessionSaved = true
     try {
       saveLessonSession(window.localStorage, nextSession)
     } catch (error) {
       errorMessage = error instanceof Error ? error.message : 'Could not save lesson progress on this device.'
+      sessionSaved = false
+    }
+    if (sessionSaved && nextSession.status === 'completed' && session.status !== 'completed') {
+      try {
+        recordLessonCompleted(window.localStorage, targetLanguageCode)
+      } catch (error) {
+        errorMessage = error instanceof Error ? error.message : 'Could not save lesson completion.'
+      }
     }
     if (LESSON_STAGES[nextSession.stageIndex].id === 'teach') {
       try {
-        addLessonVocabularyToReviewDeck(window.localStorage, starterLesson.id, starterLesson.vocabulary)
+        addLessonVocabularyToReviewDeck(window.localStorage, starterLesson.id, starterLesson.vocabulary, new Date(), targetLanguageCode)
       } catch (error) {
         errorMessage = error instanceof Error ? error.message : 'Could not add lesson words to your review deck.'
       }
@@ -270,12 +314,29 @@ export default function LessonPlayer({ onExit }: Props) {
     setSession(nextSession)
   }
 
+  function recordExerciseResult(correct: boolean) {
+    const exercise = lessonExercises[session.exerciseIndex]
+    if (!isClosedExercise(exercise)) return
+    if (!exercise.objective_id) return
+    try {
+      recordExerciseAttempt(window.localStorage, {
+        objectiveId: exercise.objective_id,
+        skills: exercise.skill,
+        correct,
+        languageCode: targetLanguageCode,
+      })
+      setStorageError('')
+    } catch (error) {
+      setStorageError(error instanceof Error ? error.message : 'Could not save this learning result.')
+    }
+  }
+
   function sendToMockTutor(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const text = learnerInput.trim()
     if (!text || (currentStage.id !== 'warmup' && currentStage.id !== 'practice' && currentStage.id !== 'roleplay')) return
 
-    const reply = createMockTutorReply(currentStage.id, text)
+    const reply = createMockTutorReply(currentStage.id, text, targetLanguageCode)
     setTurns((existing) => [...existing, { role: 'learner', text }, { role: 'ira', text: reply }])
     setLearnerInput('')
   }
@@ -305,13 +366,13 @@ export default function LessonPlayer({ onExit }: Props) {
       </div>
       <div className="lesson-preview-warning" role="note">
         <strong>Unreviewed lesson preview</strong>
-        <span>This sample Mandarin content has not been checked by a qualified reviewer. It is for prototype testing only, not instruction.</span>
+        <span>This sample {targetLanguageName} content has not been checked by a qualified reviewer. It is for prototype testing only, not instruction.</span>
       </div>
       {storageError && <p className="lesson-storage-error" role="alert">{storageError}</p>}
 
       <header className="lesson-session-heading">
         <div>
-          <p className="eyebrow">TEXT LESSON · ENGLISH TO MANDARIN · A1</p>
+          <p className="eyebrow">TEXT LESSON · ENGLISH TO {targetLanguageName.toUpperCase()} · A1</p>
           <h1>{starterLesson.title}</h1>
           <p>Practice the lesson flow with Ira. Warm-up and roleplay replies are mocked; exercise answers use the lesson answer key.</p>
         </div>
@@ -340,7 +401,9 @@ export default function LessonPlayer({ onExit }: Props) {
           <span className="lesson-complete-icon" aria-hidden="true">✓</span>
           <p className="eyebrow">SESSION COMPLETE</p>
           <h2>That’s a lovely little step.</h2>
-          <p>This sample remains unreviewed. Your review scheduling is saved on this device but does not count as verified language mastery.</p>
+          <p>This sample remains unreviewed. {targetLanguageCode === 'zh'
+            ? 'Your review scheduling is saved on this device but does not count as verified language mastery.'
+            : 'French fixed-answer outcomes and review scheduling are kept separate from Mandarin. This sample does not count as verified language mastery.'}</p>
           {session.skippedStages.length > 0 && <p>You skipped {session.skippedStages.length} stage{session.skippedStages.length === 1 ? '' : 's'}; you can revisit them when you restart.</p>}
           <div className="lesson-action-row">
             <button className="button button-outline" type="button" onClick={onExit}>Back to home</button>
@@ -355,7 +418,7 @@ export default function LessonPlayer({ onExit }: Props) {
                 <div><span className="lesson-stage-kicker">STAGE {session.stageIndex + 1} OF {LESSON_STAGES.length}</span><h2 id="lesson-stage-title">{stageTitle}</h2></div>
                 {currentStage.minutes > 0 && <span className="lesson-stage-time">~{currentStage.minutes} min</span>}
               </div>
-              {currentStage.id === 'warmup' && <p className="lesson-stage-description">Recall a few words that are due for review, then warm up with Ira.</p>}
+              {currentStage.id === 'warmup' && <p className="lesson-stage-description">{targetLanguageCode === 'zh' ? 'Recall a few words that are due for review, then warm up with Ira.' : 'Warm up with a greeting before exploring the French sample.'}</p>}
               {currentStage.id === 'teach' && <p className="lesson-stage-description">Read the lesson cards at your own pace. They are loaded from the sample lesson data.</p>}
               {currentStage.id === 'practice' && <p className="lesson-stage-description">Answer key and accepted variants from the lesson data check your answers. Ira does not decide correctness.</p>}
               {currentStage.id === 'roleplay' && <p className="lesson-stage-description">{starterLesson.roleplay.goal}</p>}
@@ -363,35 +426,45 @@ export default function LessonPlayer({ onExit }: Props) {
                 <div className="lesson-recap">
                   <p>You moved through {completedStages} of {LESSON_STAGES.length} stages in this preview.</p>
                   <p>Lesson objectives: {starterLesson.objectives.join(', ')}.</p>
-                  <p>Exercise answers were checked, but no learning history or mastery was changed.</p>
+                  <p>{targetLanguageCode === 'zh'
+                    ? 'Fixed-answer attempts are saved as practice history, but this sample does not establish mastery.'
+                    : 'French fixed-answer attempts are saved separately from other language progress. The sample remains unreviewed and does not establish mastery.'}</p>
+                  <button className="button button-outline" type="button" onClick={onReviewWords}>Next: review these lesson words</button>
                 </div>
               )}
               {currentStage.id === 'save' && (
                 <div className="lesson-save-copy">
                   <p>Finish this practice preview to save your current stage on this device.</p>
-                  <p>Words introduced on the whiteboard have been added to your local review deck. Review ratings do not count as verified language mastery.</p>
+                  <p>{targetLanguageCode === 'zh'
+                    ? 'Words introduced on the whiteboard have been added to your local review deck. Review ratings do not count as verified language mastery.'
+                    : 'French words and outcomes are stored separately from Mandarin. Review ratings do not count as verified language mastery.'}</p>
                 </div>
               )}
 
               {currentStage.id === 'practice' && !practiceComplete && (
                 <ExercisePlayer
-                  key={closedExercises[session.exerciseIndex].id}
-                  exercise={closedExercises[session.exerciseIndex]}
+                  key={lessonExercises[session.exerciseIndex].id}
+                  exercise={lessonExercises[session.exerciseIndex]}
                   index={session.exerciseIndex}
-                  total={closedExercises.length}
+                  total={lessonExercises.length}
+                  targetLocale={targetLocale}
+                  targetLanguageName={targetLanguageName}
+                  onAttempt={recordExerciseResult}
                   onComplete={completeExercise}
                 />
               )}
               {currentStage.id === 'practice' && practiceComplete && (
                 <div className="lesson-practice-complete" role="status">
                   <strong>Practice complete</strong>
-                  <p>You finished all {closedExercises.length} code-checked exercises. The answer key came from the lesson data.</p>
+                  <p>{targetLanguageCode === 'zh'
+                    ? `You finished ${lessonExercises.length} practice tasks, including ${codeCheckedExerciseCount} answer-key checks and a learner-reviewed writing draft. Only answer-key tasks contribute to the displayed exercise results.`
+                    : `You finished ${lessonExercises.length} practice tasks, including ${codeCheckedExerciseCount} answer-key checks and a learner-reviewed writing draft. Fixed-answer results are stored separately from Mandarin; the writing draft is not scored.`}</p>
                 </div>
               )}
               {currentStage.id === 'warmup' && (
-                <Suspense fallback={<div className="review-empty">Loading your due-word warm-up…</div>}>
-                  <WarmupReview />
-                </Suspense>
+                targetLanguageCode === 'zh'
+                  ? <Suspense fallback={<div className="review-empty">Loading your due-word warm-up…</div>}><WarmupReview targetLanguageCode={targetLanguageCode} /></Suspense>
+                  : <p className="lesson-stage-description">Review French sample words from your vocabulary page. They stay separate from Mandarin cards and are not reviewed curriculum.</p>
               )}
 
               {showConversation && (
@@ -399,19 +472,30 @@ export default function LessonPlayer({ onExit }: Props) {
                   {currentStage.id === 'warmup' && (
                     <div className="lesson-warmup-prompt">
                       <span className="lesson-ira-mark">I</span>
-                      <p>{stagePrompt(currentStage.id)}</p>
+                      <p>{stagePrompt(currentStage.id, targetLanguageName)}</p>
                     </div>
                   )}
                   {currentStage.id === 'roleplay' && (
                     <div className="lesson-roleplay-brief">
                       <span>SCENARIO</span><strong>{starterLesson.roleplay.title}</strong><p>{starterLesson.roleplay.goal}</p>
+                      <p>The in-lesson replies below are a mock. Continue with Ira for a guided tutor conversation, feedback, and self-review.</p>
+                      <button
+                        className="button button-outline"
+                        type="button"
+                        onClick={() => {
+                          changeStage(advanceLessonSession(session))
+                          onStartRoleplay(createLessonRoleplayScenario(starterLesson))
+                        }}
+                      >
+                        Continue with guided tutor Ira
+                      </button>
                     </div>
                   )}
                   {turns.length > 0 && (
                     <div className="lesson-turns" role="log" aria-label="Mock lesson conversation with Ira" aria-live="polite">
                       {turns.map((turn, index) => (
                         <p className={`lesson-turn is-${turn.role}`} key={`${turn.role}-${index}`}>
-                          <strong>{turn.role === 'ira' ? 'IRA' : 'YOU'}</strong><span>{turn.text}</span>
+                          <strong>{turn.role === 'ira' ? 'IRA' : 'YOU'}</strong><span lang={targetLocale}>{turn.text}</span>
                         </p>
                       ))}
                     </div>
@@ -435,7 +519,7 @@ export default function LessonPlayer({ onExit }: Props) {
             <aside className="lesson-whiteboard" aria-label="Lesson whiteboard">
               <div className="lesson-whiteboard-heading"><span className="lesson-whiteboard-icon" aria-hidden="true">✳</span><div><span>IRA’S WHITEBOARD</span><strong>{currentStage.id === 'teach' ? 'Lesson cards' : 'Today’s focus'}</strong></div></div>
               {currentStage.id === 'teach'
-                ? whiteboardCards.map((card) => <Whiteboard key={card.id} card={card} />)
+                ? whiteboardCards.map((card) => <Whiteboard key={card.id} card={card} targetLocale={targetLocale} />)
                 : currentStage.id === 'roleplay'
                   ? <div className="lesson-board-note"><span>TRY THIS SCENARIO</span><strong>{starterLesson.roleplay.title}</strong><p>{starterLesson.roleplay.goal}</p></div>
                   : currentStage.id === 'recap'

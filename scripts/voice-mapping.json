@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "regions": {
+    "china": {
+      "zh": ["kokoro", "tencent"],
+      "en": ["kokoro", "tencent"],
+      "zh-en-mixed": ["tencent"],
+      "fr": ["kokoro"],
+      "es": ["kokoro"],
+      "ja": ["kokoro"]
+    },
+    "global": {
+      "zh": ["kokoro", "azure", "local"],
+      "en": ["kokoro", "azure", "local"],
+      "zh-en-mixed": ["azure"],
+      "fr": ["kokoro", "azure", "local"],
+      "es": ["kokoro", "azure", "local"],
+      "ja": ["kokoro", "azure", "local"]
+    }
+  },
+  "voiceIds": {
+    "kokoro": {
+      "zh": { "male": null, "female": null },
+      "en": { "male": null, "female": null },
+      "fr": { "male": null, "female": null },
+      "es": { "male": null, "female": null },
+      "ja": { "male": null, "female": null }
+    },
+    "tencent": {
+      "zh": { "male": null, "female": null },
+      "en": { "male": null, "female": null }
+    },
+    "tencent-standard": {
+      "zh": { "male": null, "female": null },
+      "en": { "male": null, "female": null }
+    },
+    "tencent-premium": {
+      "zh": { "male": null, "female": null },
+      "en": { "male": null, "female": null }
+    },
+    "azure": {
+      "zh": { "male": "zh-CN-YunxiNeural", "female": "zh-CN-XiaoxiaoNeural" },
+      "en": { "male": "en-GB-RyanNeural", "female": "en-GB-SoniaNeural" },
+      "fr": { "male": "fr-FR-HenriNeural", "female": "fr-FR-DeniseNeural" },
+      "es": { "male": "es-ES-AlvaroNeural", "female": "es-ES-ElviraNeural" },
+      "ja": { "male": "ja-JP-KeitaNeural", "female": "ja-JP-NanamiNeural" }
+    },
+    "local": {
+      "zh": { "male": "local-male", "female": "local-female" },
+      "en": { "male": "local-male", "female": "local-female" },
+      "fr": { "male": "local-male", "female": "local-female" },
+      "es": { "male": "local-male", "female": "local-female" },
+      "ja": { "male": "local-male", "female": "local-female" }
+    }
+  },
+  "winners": {
+    "china": {
+      "zh": { "male": null, "female": null },
+      "en": { "male": null, "female": null },
+      "zh-en-mixed": { "male": null, "female": null },
+      "fr": { "male": null, "female": null },
+      "es": { "male": null, "female": null },
+      "ja": { "male": null, "female": null }
+    },
+    "global": {
+      "zh": { "male": null, "female": null },
+      "en": { "male": null, "female": null },
+      "zh-en-mixed": { "male": null, "female": null },
+      "fr": { "male": null, "female": null },
+      "es": { "male": null, "female": null },
+      "ja": { "male": null, "female": null }
+    }
+  },
+  "normalization": {
+    "targetRmsDbfs": -20,
+    "peakCeilingDbfs": -1,
+    "cacheTtlSeconds": 3600,
+    "cacheMaxBytes": 33554432
+  },
+  "launchVerification": {
+    "tencentMainlandConsole": "pending",
+    "nativeSpeakerBakeoff": "pending",
+    "kokoroDependencyAndVoiceAssetLicenses": "pending"
+  }
+}

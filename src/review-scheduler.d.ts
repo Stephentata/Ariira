@@ -6,6 +6,7 @@ export type ReviewItem = {
   translation: string
   exampleSentence?: string
   source: string
+  languageCode?: string
 }
 export type ReviewCard = ReviewItem & {
   transliteration: string
@@ -34,6 +35,7 @@ export function addLessonVocabularyToReviewDeck(
     example_sentence?: string
   }>,
   now?: Date,
+  languageCode?: string,
 ): number
 export function getDueReviewCards(cards: ReviewCard[], now?: Date, limit?: number): ReviewCard[]
 export function getDailyReviewCount(cards: ReviewCard[], now?: Date): number

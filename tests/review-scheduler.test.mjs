@@ -165,4 +165,51 @@ test('lesson words enter the review deck when teaching is completed', () => {
   assert.equal(deck[0].id, 'lesson-1:nihao')
   assert.equal(deck[0].exampleSentence, '你好！')
   assert.equal(deck[0].source, 'lesson-1')
+  assert.equal(deck[0].languageCode, 'zh')
+})
+
+test('lesson vocabulary can be added to a separate French review queue', () => {
+  const storage = createMemoryStorage()
+  const frenchVocabulary = [{
+    id: 'bonjour',
+    text: 'Bonjour',
+    transliteration: 'approx. bon-zhoor',
+    translation_en: 'hello; good morning',
+    example_sentence: 'Bonjour !',
+  }]
+  const mandarinVocabulary = [{
+    id: 'nihao',
+    text: '你好',
+    transliteration: 'nǐ hǎo',
+    translation_en: 'hello',
+    example_sentence: '你好！',
+  }]
+
+  addLessonVocabularyToReviewDeck(storage, 'zh-a1-l01', mandarinVocabulary, now)
+  assert.equal(addLessonVocabularyToReviewDeck(storage, 'fr-a1-l01', frenchVocabulary, now, 'fr'), 1)
+  const deck = readReviewDeck(storage)
+
+  assert.deepEqual(deck.map(({ word, languageCode }) => ({ word, languageCode })), [
+    { word: '你好', languageCode: 'zh' },
+    { word: 'Bonjour', languageCode: 'fr' },
+  ])
+  assert.equal(getDueReviewCards(deck.filter(({ languageCode }) => languageCode === 'fr'), now).length, 1)
+  assert.equal(addLessonVocabularyToReviewDeck(storage, 'es-a1-l01', frenchVocabulary, now, 'es'), 1)
+  assert.equal(readReviewDeck(storage).at(-1).languageCode, 'es')
+  assert.throws(
+    () => addLessonVocabularyToReviewDeck(storage, 'bad-language', frenchVocabulary, now, ''),
+    /Unsupported review language/,
+  )
+})
+
+test('legacy review cards are migrated to Mandarin without changing schedule', () => {
+  const storage = createMemoryStorage()
+  const legacyCard = createReviewCard(sampleItem, now)
+  delete legacyCard.languageCode
+  storage.setItem('ari-review-deck', JSON.stringify([legacyCard]))
+
+  const migrated = readReviewDeck(storage)[0]
+  assert.equal(migrated.languageCode, 'zh')
+  assert.equal(migrated.dueAt, legacyCard.dueAt)
+  assert.equal(migrated.state, legacyCard.state)
 })

@@ -10,19 +10,25 @@
     "test": "node --test",
     "benchmark:tutor": "node scripts/benchmark-tutor.mjs",
     "validate:lessons": "node scripts/validate-lessons.mjs",
+    "ingest:knowledge": "node scripts/ingest-knowledge-base.mjs",
+    "validate:knowledge": "node scripts/validate-knowledge-base.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.3.1",
+    "pinyin-pro": "^3.29.5",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "three": "^0.186.1"
   },
   "devDependencies": {
-    "ajv": "^8.17.1",
-    "ajv-formats": "^3.0.1",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
+    "@types/three": "^0.186.0",
     "@vitejs/plugin-react": "^6.1.1",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
     "oxlint": "^1.81.0",
     "typescript": "~6.0.2",
     "vite": "^8.3.0"

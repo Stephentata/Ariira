@@ -2725,9 +2725,9 @@ function App() {
                           }
                         }}
                       />
-                      <div className="composer-footer"><span>Local AI · may occasionally make mistakes</span><button className="send-button" type="submit" disabled={!tutorInput.trim() || tutorPending} aria-label="Send message"><Icon name="arrow" size={18} /></button></div>
+                      <div className="composer-footer"><span>{import.meta.env.DEV ? 'Local AI · may occasionally make mistakes' : 'Cloud AI · may occasionally make mistakes'}</span><button className="send-button" type="submit" disabled={!tutorInput.trim() || tutorPending} aria-label="Send message"><Icon name="arrow" size={18} /></button></div>
                     </form>
-                    <p className="tutor-preview-note">Your messages are sent to Ollama running on this computer; no cloud AI service is used by this tutor preview.</p>
+                    <p className="tutor-preview-note">{import.meta.env.DEV ? 'Your messages are sent to Ollama running on this computer; no cloud AI service is used by this tutor preview.' : 'Your messages are sent to Cloudflare Workers AI to generate tutor replies.'}</p>
                   </div>
                 </details>
                 <div className="mobile-lesson-dock" role="group" aria-label="Lesson controls">

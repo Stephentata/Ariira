@@ -187,7 +187,16 @@ export class OllamaLLMProvider {
       })
 
       if (!response.ok) {
-        throw new Error(`Ollama returned ${response.status}: ${response.statusText || 'request failed'}`)
+        let detail = response.statusText || 'request failed'
+        try {
+          const errorResponse = await response.json()
+          if (typeof errorResponse?.error === 'string' && errorResponse.error.trim()) {
+            detail = errorResponse.error
+          }
+        } catch {
+          // Keep the HTTP status text when an upstream error is not JSON.
+        }
+        throw new Error(`Tutor service returned ${response.status}: ${detail}`)
       }
 
       const result = await response.json()
@@ -200,23 +209,23 @@ export class OllamaLLMProvider {
         !('content' in result.message) ||
         typeof result.message.content !== 'string'
       ) {
-        throw new Error('Ollama returned an unexpected response. Check that the local model is running.')
+        throw new Error('The AI tutor returned an unexpected response. Please try again.')
       }
 
       let parsed
       try {
         parsed = JSON.parse(result.message.content)
       } catch {
-        throw new Error('The local model did not return valid JSON. Please try again.')
+        throw new Error('The AI tutor did not return valid structured data. Please try again.')
       }
 
-      this.logger.info('[LLMProvider] Ollama chat completed', {
+      this.logger.info('[LLMProvider] Tutor chat completed', {
         model: this.model,
         latencyMs: Date.now() - startedAt,
       })
       return parsed
     } catch (error) {
-      this.logger.error('[LLMProvider] Ollama chat failed', {
+      this.logger.error('[LLMProvider] Tutor chat failed', {
         model: this.model,
         latencyMs: Date.now() - startedAt,
         error: error instanceof Error ? error.message : 'Unknown provider error',
@@ -356,14 +365,14 @@ export function validateTutorResponse(value, level = 'A1', targetLanguageCode = 
     !['continue', 'practice', 'show_whiteboard', 'finish'].includes(value.next_action) ||
     (value.whiteboard_card !== undefined && !isWhiteboardCard(value.whiteboard_card))
   ) {
-    throw new Error('The local model returned an incomplete or invalid tutor reply. Please try again.')
+    throw new Error('The AI tutor returned an incomplete or invalid reply. Please try again.')
   }
 
   if (blockedTopics.test(JSON.stringify(value))) {
-    throw new Error('The local model response did not pass the safe-topic check. Please try again.')
+    throw new Error('The AI tutor response did not pass the safe-topic check. Please try again.')
   }
   if (countTutorSentences(value.reply_text) > maxSentences) {
-    throw new Error('The local model reply was too long. Please try again.')
+    throw new Error('The AI tutor reply was too long. Please try again.')
   }
 
   const allowed = ratioTargets[level]
@@ -374,7 +383,7 @@ export function validateTutorResponse(value, level = 'A1', targetLanguageCode = 
       ratio < Math.max(0, allowed.min - languageRatioTolerance) ||
       ratio > Math.min(1, allowed.max + languageRatioTolerance)
     ) {
-      throw new Error(`The local model reply did not meet the ${level} language-ratio check for ${targetLanguageCode}. Please try again.`)
+      throw new Error(`The AI tutor reply did not meet the ${level} language-ratio check for ${targetLanguageCode}. Please try again.`)
     }
   }
 
@@ -515,7 +524,7 @@ export async function requestStructuredTutorReply(history, provider = ollamaProv
     const sentenceLimit = profile.openingPhase ? 6 : 3
     return validateTutorResponse(response, profile.level, profile.targetLanguageCode, sentenceLimit)
   } catch (error) {
-    console.error('[Tutor quality] Ollama reply rejected', {
+    console.error('[Tutor quality] AI tutor reply rejected', {
       level: profile.level,
       error: error instanceof Error ? error.message : 'Unknown tutor quality error',
     })

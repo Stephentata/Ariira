@@ -138,12 +138,12 @@ test('validates structured corrections, new words, and schema-conforming whitebo
 })
 
 test('rejects malformed, overlong, unsafe, and wrong-ratio tutor output', () => {
-  assert.throws(() => validateTutorResponse({ ...validReply, unexpected: 'value' }), /invalid tutor reply/)
-  assert.throws(() => validateTutorResponse({ ...validReply, corrections: [{ ...validReply.corrections[0] }, { ...validReply.corrections[0] }, { ...validReply.corrections[0] }] }), /invalid tutor reply/)
+  assert.throws(() => validateTutorResponse({ ...validReply, unexpected: 'value' }), /invalid reply/)
+  assert.throws(() => validateTutorResponse({ ...validReply, corrections: [{ ...validReply.corrections[0] }, { ...validReply.corrections[0] }, { ...validReply.corrections[0] }] }), /invalid reply/)
   assert.throws(() => validateTutorResponse({ ...validReply, reply_text: '你好。谢谢。', native_support: 'Hi.' }), /language-ratio check/)
   assert.throws(() => validateTutorResponse({ ...validReply, reply_text: '你好。I can help with a weapon. 你呢？' }), /safe-topic check/)
   assert.throws(() => validateTutorResponse({ ...validReply, reply_text: '你好。I like coffee. 我想喝水。那你呢？再见。' }), /too long/)
-  assert.throws(() => validateTutorResponse({ ...validReply, whiteboard_card: { type: 'vocab_card', title: 'Bad card' } }), /invalid tutor reply/)
+  assert.throws(() => validateTutorResponse({ ...validReply, whiteboard_card: { type: 'vocab_card', title: 'Bad card' } }), /invalid reply/)
 })
 
 test('Ollama provider sends structured non-streaming chat and reports success latency', async () => {
@@ -169,7 +169,7 @@ test('Ollama provider sends structured non-streaming chat and reports success la
   assert.equal(body.stream, false)
   assert.deepEqual(body.format, tutorResponseSchema)
   assert.deepEqual(result, validReply)
-  assert.equal(events[0][0], '[LLMProvider] Ollama chat completed')
+  assert.equal(events[0][0], '[LLMProvider] Tutor chat completed')
   assert.equal(events[0][1].model, 'test-model')
   assert.equal(typeof events[0][1].latencyMs, 'number')
 })
@@ -182,17 +182,23 @@ test('Ollama provider explicitly logs and throws HTTP and invalid-JSON errors', 
   }
   const failingProvider = new OllamaLLMProvider({
     logger: errorLogger,
-    fetcher: async () => new Response('', { status: 503, statusText: 'Unavailable' }),
+    fetcher: async () => new Response(JSON.stringify({ error: 'Workers AI is not configured.' }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json' },
+    }),
   })
-  await assert.rejects(() => failingProvider.chat([], tutorResponseSchema), /Ollama returned 503/)
+  await assert.rejects(
+    () => failingProvider.chat([], tutorResponseSchema),
+    /Tutor service returned 503: Workers AI is not configured\./,
+  )
 
   const invalidJsonProvider = new OllamaLLMProvider({
     logger: errorLogger,
     fetcher: async () => new Response(JSON.stringify({ message: { content: '{bad json' } }), { status: 200 }),
   })
-  await assert.rejects(() => invalidJsonProvider.chat([], tutorResponseSchema), /did not return valid JSON/)
+  await assert.rejects(() => invalidJsonProvider.chat([], tutorResponseSchema), /did not return valid structured data/)
   assert.equal(events.length, 2)
-  assert.equal(events[0][0], '[LLMProvider] Ollama chat failed')
+  assert.equal(events[0][0], '[LLMProvider] Tutor chat failed')
 })
 
 test('bounds sent history and returns a safe redirect without calling the model', async () => {

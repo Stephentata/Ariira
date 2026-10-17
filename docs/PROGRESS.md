@@ -149,17 +149,18 @@
 
 ## M5 — Tutor chat with local LLM
 
-**Status:** Implemented and verified with the locally installed Ollama model. The prototype is not approved as authoritative Mandarin instruction.
+**Status:** Local development is verified with Ollama. Production is wired through a Cloudflare Pages Function to Workers AI; live inference still requires the deployment smoke test. The prototype is not approved as authoritative Mandarin instruction.
 
 ### Works
 
-- Tutor chat uses the `LLMProvider` interface with a local Ollama implementation; requests stay on the local machine and use the Vite development proxy.
+- Tutor chat uses the `LLMProvider` interface. Local development uses Ollama through the Vite development proxy. Production uses a Cloudflare Pages Function and a Cloudflare Workers AI binding; the Function adapts the existing Ollama-shaped request to Workers AI JSON-schema mode and returns the provider-compatible response shape.
 - Ira's Section 10 prompt is filled from a learner profile, lesson context, vocabulary, grammar point, error profile, memory summary, and CEFR level. The current profile is a fixed English-to-Mandarin A1 café practice profile.
 - The prompt and checker apply level-based target-language ratios (A1 30–50%, A2 50–70%, B1 70–90%, B2 90–100%). The check measures Han characters against English letters in the Mandarin reply and its brief English support, with a 4-percentage-point tolerance for this heuristic.
-- Ollama receives a strict structured-output schema. The app validates JSON shape, reply length and sentence count, a two-correction limit, new-word data, optional whiteboard cards against the lesson card types, safe-topic terms, and language ratio before displaying a reply.
+- The model receives a strict structured-output schema. The app validates JSON shape, reply length and sentence count, a two-correction limit, new-word data, optional whiteboard cards against the lesson card types, safe-topic terms, and language ratio before displaying a reply.
 - Corrections, new words, and optional whiteboard cards appear in the transcript as explicitly AI-generated content. They do not change exercise answer keys or automatically enter the review deck.
 - The request includes at most the latest 16 chat messages plus the system prompt. Chat history is kept in page memory only; it is not persisted.
 - Provider success/failure logs include model and latency without logging conversation text. Invalid provider replies are reported in the UI with a retry action; there is no success-shaped fallback.
+- The Pages Function validates bounded chat input, maps the schema into Workers AI JSON mode, fixes the production model to `@cf/meta/llama-3.1-8b-instruct`, and returns errors instead of fabricating a reply.
 
 ### Verification
 
@@ -170,6 +171,7 @@
 - `npm run benchmark:tutor`: 3/3 English-to-Mandarin A1 café turns passed the automated response checks on `qwen2.5-coder:7b`. Measured provider latencies were 886 ms, 687 ms, and 674 ms (749 ms mean); measured ratios were 27%, 27%, and 32%. The first two pass only with the documented 4-point heuristic tolerance.
 - Browser check: a typed coffee order and a milk follow-up received context-aware local-model replies with generated pinyin and English support. A stubbed response also verified correction, new-word, and whiteboard rendering.
 - `git diff --check`: passed.
+- Pages Function unit tests cover Workers AI request mapping, missing binding, malformed/oversized requests, and inference failures. Production inference remains to be smoke-tested after deployment.
 
 ### Manual test checklist
 
@@ -187,7 +189,8 @@
 - The benchmark model is a locally installed coder-tuned 7B model. It sometimes falls just outside the nominal A1 ratio, so the small tolerance is necessary; a different model may need a fresh benchmark and threshold review.
 - The safety check is a lightweight keyword filter, not a comprehensive content-safety system. It can produce false positives and cannot guarantee that every unsafe request or answer is caught.
 - Language-ratio measurement currently recognizes Mandarin Han characters and English letters only. Other language pairs need their own validated counting and review.
-- The learner profile and lesson context are fixed for the café prototype. Persistent memory, transcript settings, user-configurable goals, an account-backed tutor, and a production Ollama service/API are not implemented.
+- The learner profile and lesson context are fixed for the café prototype. Persistent memory, transcript settings, user-configurable goals, and an account-backed tutor are not implemented.
+- Production requires a Workers AI binding named `AI` on the Cloudflare Pages project; configure it in **Settings > Bindings**, then redeploy. Workers AI usage is subject to Cloudflare account limits and billing.
 - AI-generated corrections and new words are not saved into review cards, and the transcript does not yet include a **Report a mistake** action.
 - The sample Mandarin lessons remain unreviewed and are not used as authoritative tutor content.
 

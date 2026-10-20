@@ -188,7 +188,7 @@ export function createTtsHandler({
     if (validationError) return jsonResponse({ error: validationError }, 400)
 
     const cacheKey = getCacheKey(request, await sha256(
-      `cloudflare-melotts-v1|${payload.language}|${payload.input}`,
+      `cloudflare-melotts-v2|${payload.language}|${payload.input}`,
     ))
     if (cache) {
       try {

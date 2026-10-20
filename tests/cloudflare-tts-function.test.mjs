@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import test from 'node:test'
 import { createTtsHandler } from '../functions/api/ari/tts.js'
 
@@ -27,6 +28,7 @@ function createMemoryCache() {
   return {
     match: async (request) => values.get(request.url)?.clone(),
     put: async (request, response) => values.set(request.url, response.clone()),
+    seed: (request, response) => values.set(request.url, response.clone()),
     size: () => values.size,
   }
 }
@@ -113,6 +115,27 @@ test('Pages TTS caches audio for one hour and reuses it across the unused voice-
   })
   assert.equal(cached.status, 200)
   assert.equal(cached.headers.get('content-type'), 'audio/wav')
+  assert.equal(cloud.calls.length, 1)
+})
+
+test('Pages TTS skips cached audio with the old mislabeled content type', async () => {
+  const cloud = createMockWorkersAi()
+  const cache = createMemoryCache()
+  const input = { input: '你好', language: 'zh', gender: 'female' }
+  const oldKey = createHash('sha256').update('cloudflare-melotts-v1|zh|你好').digest('hex')
+  cache.seed(
+    new Request(`https://ariira.pages.dev/__ari_tts_cache/${oldKey}`),
+    new Response(new Uint8Array([1, 2, 3]), { headers: { 'Content-Type': 'audio/mpeg' } }),
+  )
+
+  const response = await createTtsHandler({ cache })({
+    request: createRequest(JSON.stringify(input)),
+    env: { AI: cloud.AI },
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(response.headers.get('content-type'), 'audio/wav')
+  assert.deepEqual(new Uint8Array(await response.arrayBuffer()), new Uint8Array([73, 68, 51, 4, 5]))
   assert.equal(cloud.calls.length, 1)
 })
 

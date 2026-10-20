@@ -41,7 +41,7 @@ test('Pages TTS uses the existing Workers AI binding without provider secrets', 
   })
 
   assert.equal(response.status, 200)
-  assert.equal(response.headers.get('content-type'), 'audio/mpeg')
+  assert.equal(response.headers.get('content-type'), 'audio/wav')
   assert.equal(response.headers.get('cache-control'), 'public, max-age=3600')
   assert.deepEqual(new Uint8Array(await response.arrayBuffer()), new Uint8Array([73, 68, 51, 4, 5]))
   assert.deepEqual(cloud.calls, [{
@@ -112,7 +112,7 @@ test('Pages TTS caches audio for one hour and reuses it across the unused voice-
     env: { AI: cloud.AI },
   })
   assert.equal(cached.status, 200)
-  assert.equal(cached.headers.get('content-type'), 'audio/mpeg')
+  assert.equal(cached.headers.get('content-type'), 'audio/wav')
   assert.equal(cloud.calls.length, 1)
 })
 

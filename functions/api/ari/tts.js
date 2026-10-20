@@ -224,7 +224,7 @@ export function createTtsHandler({
 
     const response = new Response(audio, {
       headers: {
-        'Content-Type': 'audio/mpeg',
+        'Content-Type': 'audio/wav',
         'Cache-Control': `public, max-age=${cacheTtlSeconds}`,
       },
     })

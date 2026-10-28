@@ -27,9 +27,12 @@ import {
   saveSpeechPreferences,
   type SpeechPreferences,
 } from './speech-options.js'
-import { cancelSpeechPlayback, playSpeechAudio } from './speech-playback.js'
+import { cancelSpeechPlayback, playSpeechAudio, unlockSpeechPlayback } from './speech-playback.js'
 import { isLikelyNativeLanguage, isLowConfidenceSpeech, parsePracticePhraseOptions } from './speech-input.js'
 import { LANGUAGES } from './language-options.js'
+import { getLanguageVoiceMetadata } from './languages.js'
+import { extractLearnerName, getNextVoiceStage, getStreamableTutorText, parseTutorCard, takeCompleteSentences, type TutorPhraseCard } from './voice-tutor.js'
+import { requestVoiceTranscription, requestVoiceTutorResponse } from './voice-tutor-client.js'
 import { TutorService } from './tutor-service.js'
 import KnowledgeAdmin from './KnowledgeAdmin'
 import { recordSafeguardEvent } from './safeguard-telemetry.js'
@@ -83,6 +86,7 @@ type TutorMessage = {
   cooldown?: boolean
   safeguard?: 'distress' | 'safe-word' | 'redirect'
   learningState?: { failures: number; outcomes: boolean[]; errorPatterns: Record<string, number> }
+  phraseCard?: TutorPhraseCard
 }
 type SessionSummary = {
   corrections: number
@@ -104,6 +108,7 @@ type SpeechTurnEvidence = {
   alternatives: Array<{ transcript: string; confidence: number | null }>
   nativeLanguageLikely?: boolean
 }
+type VoiceStage = 'opening' | 'name' | 'small-talk' | 'topic' | 'teaching' | 'conversation'
 type BrowserSpeechRecognition = {
   continuous: boolean
   interimResults: boolean
@@ -479,6 +484,7 @@ function App() {
   const [helpPhraseAfterMessageId, setHelpPhraseAfterMessageId] = useState<number | null>(null)
   const [speechCorrectionEditing, setSpeechCorrectionEditing] = useState(false)
   const [voiceError, setVoiceError] = useState('')
+  const [voiceFallbackNotice, setVoiceFallbackNotice] = useState('')
   const [voiceInputMode] = useState<VoiceInputMode>('tap')
   const [voiceLatencyMs, setVoiceLatencyMs] = useState<number | null>(null)
   const [speechPreferenceState, setSpeechPreferenceState] = useState(getInitialSpeechPreferenceState)
@@ -501,6 +507,25 @@ function App() {
   const microphoneStreamRef = useRef<MediaStream | null>(null)
   const microphoneFrameRef = useRef<number | null>(null)
   const speechGenerationRef = useRef(0)
+  const voiceChatAbortRef = useRef<AbortController | null>(null)
+  const voiceTurnIdRef = useRef(0)
+  const interruptedVoiceTurnRef = useRef<number | null>(null)
+  const activeVoiceTurnRef = useRef<{
+    id: number
+    history: TutorMessage[]
+    completedText: string
+    currentText: string
+    boundary: number
+  } | null>(null)
+  const voiceStageRef = useRef<VoiceStage>('opening')
+  const generatedVoiceReplyRef = useRef('')
+  const voiceLearnerNameRef = useRef(learnerData.settings.displayName.trim())
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const mediaRecorderStreamRef = useRef<MediaStream | null>(null)
+  const mediaRecorderChunksRef = useRef<Blob[]>([])
+  const mediaRecorderTimeoutRef = useRef<number | null>(null)
+  const voiceActivityFrameRef = useRef<number | null>(null)
+  const mediaRecorderCancelledRef = useRef(false)
   const holdToSpeakActiveRef = useRef(false)
   const pushToTalkSessionRef = useRef(false)
   const holdTranscriptRef = useRef('')
@@ -536,6 +561,17 @@ function App() {
   const sourceLanguage = languages.find((language) => language.code === sourceCode) ?? languages[0]
   const targetLanguage = languages.find((language) => language.code === targetCode) ?? languages[1]
   const tutorVoiceGender = getTutorSpeechGender(learnerData.settings.tutorName)
+  function getTutorSpeechOptions(locale = targetLanguage.locale, rate = speechPreferences.rate, gender = tutorVoiceGender) {
+    const languageCode = locale.split('-')[0]
+    const voiceMetadata = getLanguageVoiceMetadata(languageCode)
+    return {
+      provider: learnerData.settings.speechProvider,
+      flavor: speechPreferences.flavor,
+      rate,
+      voiceNameHints: voiceMetadata?.voiceNameHints[gender] ?? [],
+      onFallback: () => setVoiceFallbackNotice(`${learnerData.settings.tutorName} switched to a voice installed on this device because Cloudflare speech was unavailable.`),
+    }
+  }
   const learningSummary = useMemo(
     () => getLearningProgressSummary(learningSnapshot.progress, new Date(), targetCode),
     [learningSnapshot.progress, targetCode],
@@ -558,6 +594,12 @@ function App() {
     if (tapSilenceTimerRef.current !== null) window.clearTimeout(tapSilenceTimerRef.current)
     if (microphoneFrameRef.current !== null) window.cancelAnimationFrame(microphoneFrameRef.current)
     microphoneStreamRef.current?.getTracks().forEach((track) => track.stop())
+    if (mediaRecorderTimeoutRef.current !== null) window.clearTimeout(mediaRecorderTimeoutRef.current)
+    if (voiceActivityFrameRef.current !== null) window.cancelAnimationFrame(voiceActivityFrameRef.current)
+    mediaRecorderCancelledRef.current = true
+    mediaRecorderRef.current?.stop()
+    mediaRecorderStreamRef.current?.getTracks().forEach((track) => track.stop())
+    voiceChatAbortRef.current?.abort()
   }, [])
 
   useEffect(() => {
@@ -753,9 +795,257 @@ function App() {
     }
   }
 
+  function interruptVoiceTutor() {
+    const activeTurn = voiceTurnIdRef.current
+    if (tutorPendingRef.current || voiceSpeakingRef.current) {
+      const activeSpeech = activeVoiceTurnRef.current
+      if (activeSpeech?.id === activeTurn) {
+        const partialText = `${activeSpeech.completedText}${activeSpeech.currentText.slice(0, activeSpeech.boundary)}`.trim()
+        if (partialText) {
+          const partialHistory = [...activeSpeech.history, {
+            id: Date.now(),
+            role: 'tutor' as const,
+            text: partialText,
+          }]
+          updateTutorMessages(partialHistory)
+          saveCurrentTutorHistory(partialHistory)
+        }
+        activeVoiceTurnRef.current = null
+      }
+      interruptedVoiceTurnRef.current = activeTurn
+      voiceTurnIdRef.current += 1
+      voiceChatAbortRef.current?.abort()
+      voiceChatAbortRef.current = null
+      speechGenerationRef.current += 1
+      cancelSpeechPlayback()
+      voiceSpeakingRef.current = false
+      tutorPendingRef.current = false
+      setVoiceSpeaking(false)
+      setTutorPending(false)
+      updateVoiceAudioLevel(0)
+    }
+  }
+
+  async function runStreamingVoiceTurn(
+    history: TutorMessage[],
+    stage: VoiceStage,
+    speechEvidence?: SpeechTurnEvidence,
+    topicOverride?: string,
+    sectionOverride?: string,
+  ) {
+      const turnId = ++voiceTurnIdRef.current
+      const controller = new AbortController()
+      voiceChatAbortRef.current = controller
+      interruptedVoiceTurnRef.current = null
+      generatedVoiceReplyRef.current = ''
+      let learnerName = voiceLearnerNameRef.current
+      const latestUserMessage = [...history].reverse().find((message) => message.role === 'user')
+      if (stage === 'name' && latestUserMessage) {
+        learnerName = extractLearnerName(latestUserMessage.text, learnerName)
+      }
+      const nativeLanguageName = sourceLanguage.name
+      const topics = learnerData.settings.interests
+        .split(',')
+        .map((topic) => topic.trim())
+        .filter(Boolean)
+        .slice(0, 8)
+      const activeTopic = topicOverride ?? activeRoleplay?.title ?? (activeFreeChat ? freeChatTopic || 'Free conversation' : activeLessonTitle)
+      const payload = {
+        languageCode: targetCode,
+        nativeLanguage: nativeLanguageName,
+        tutor: learnerData.settings.tutorName,
+        style: learnerData.settings.tutorMode,
+        level: learnerData.settings.level,
+        topics,
+        activeTopic,
+        section: sectionOverride ?? activeSection,
+        freeChat: activeFreeChat,
+        sessionDurationMinutes: activeFreeChat ? freeChatDurationMinutes : undefined,
+        name: learnerName,
+        stage,
+        uncertainRecognition: Boolean(speechEvidence && isLowConfidenceSpeech(speechEvidence.alternatives)),
+        messages: history.map((message) => ({
+          role: message.role === 'tutor' ? 'assistant' : 'user',
+          content: message.text,
+        })),
+      }
+      let speechBuffer = ''
+      let completedSpeech = ''
+      let currentSpeech = ''
+      let currentSpeechBoundary = 0
+      activeVoiceTurnRef.current = {
+        id: turnId,
+        history,
+        completedText: '',
+        currentText: '',
+        boundary: 0,
+      }
+      let queueFailure: unknown = null
+      const speechQueue: string[] = []
+      let queueFinished = false
+      let wakeQueue: (() => void) | null = null
+      const wakeSpeechQueue = () => {
+        wakeQueue?.()
+        wakeQueue = null
+      }
+      const fallbackNotice = () => {
+        setVoiceFallbackNotice(`${learnerData.settings.tutorName} switched to a voice installed on this device because Cloudflare speech was unavailable.`)
+      }
+
+      setTutorError('')
+      setTutorPending(true)
+      tutorPendingRef.current = true
+      voiceConversationRef.current = true
+      setVoiceConversation(true)
+
+      const playQueuedSentences = async () => {
+        while (true) {
+          const sentence = speechQueue.shift()
+          if (sentence) {
+            if (controller.signal.aborted) break
+            currentSpeech = sentence
+            currentSpeechBoundary = 0
+            activeVoiceTurnRef.current = {
+              id: turnId,
+              history,
+              completedText: completedSpeech,
+              currentText: currentSpeech,
+              boundary: currentSpeechBoundary,
+            }
+            voiceSpeakingRef.current = true
+            setVoiceSpeaking(true)
+            setTutorPending(false)
+            try {
+              await playSpeechAudio(sentence, targetLanguage.locale, tutorVoiceGender, globalThis, {
+                ...getTutorSpeechOptions(targetLanguage.locale, speechPreferences.rate, tutorVoiceGender),
+                onFallback: fallbackNotice,
+                onLevel: updateVoiceAudioLevel,
+                onLevelError: (error) => setDataMessage(error instanceof Error
+                  ? `Tutor audio is playing, but the live mascot volume meter is unavailable: ${error.message}`
+                  : 'Tutor audio is playing, but the live mascot volume meter is unavailable.'),
+                onBoundary: (index, length) => {
+                  if (index >= 0 && length > 0) {
+                    currentSpeechBoundary = Math.max(currentSpeechBoundary, index + length)
+                    activeVoiceTurnRef.current = {
+                      id: turnId,
+                      history,
+                      completedText: completedSpeech,
+                      currentText: currentSpeech,
+                      boundary: currentSpeechBoundary,
+                    }
+                    setVoiceTranscript(`${completedSpeech}${currentSpeech.slice(0, currentSpeechBoundary)}`)
+                  }
+                },
+              })
+              if (controller.signal.aborted) break
+              completedSpeech += `${sentence} `
+              currentSpeech = ''
+              currentSpeechBoundary = 0
+              activeVoiceTurnRef.current = {
+                id: turnId,
+                history,
+                completedText: completedSpeech,
+                currentText: '',
+                boundary: 0,
+              }
+              voiceSpeakingRef.current = false
+              setVoiceSpeaking(false)
+              setVoiceTranscript(completedSpeech.trim())
+              if (!queueFinished && voiceConversationRef.current) setTutorPending(true)
+            } catch (error) {
+              if (controller.signal.aborted || (error instanceof DOMException && error.name === 'AbortError')) break
+              queueFailure = error
+              controller.abort()
+              break
+            }
+            continue
+          }
+          if (queueFinished || controller.signal.aborted) break
+          await new Promise<void>((resolve) => { wakeQueue = resolve })
+        }
+      }
+      const queuePromise = playQueuedSentences()
+
+      try {
+        const reply = await requestVoiceTutorResponse(payload, {
+          signal: controller.signal,
+          onText: (fullText, token) => {
+            generatedVoiceReplyRef.current = fullText
+            speechBuffer += token
+            const safeText = getStreamableTutorText(speechBuffer)
+            const complete = takeCompleteSentences(safeText)
+            if (complete.sentences.length) {
+              speechQueue.push(...complete.sentences)
+              speechBuffer = complete.remainder
+              wakeSpeechQueue()
+            }
+          },
+        })
+        const finalSpeechText = getStreamableTutorText(speechBuffer)
+        const finalSentences = takeCompleteSentences(finalSpeechText)
+        speechQueue.push(...finalSentences.sentences)
+        if (finalSentences.remainder.trim()) speechQueue.push(finalSentences.remainder.trim())
+        queueFinished = true
+        wakeSpeechQueue()
+        await queuePromise
+        if (queueFailure) throw queueFailure
+        if (turnId !== voiceTurnIdRef.current || controller.signal.aborted) return
+
+        const parsed = parseTutorCard(reply)
+        const tutorMessage: TutorMessage = {
+          id: Date.now(),
+          role: 'tutor',
+          text: parsed.displayText || completedSpeech.trim(),
+          ...(parsed.card ? { phraseCard: parsed.card } : {}),
+        }
+        const completeHistory = [...history, tutorMessage]
+        activeVoiceTurnRef.current = null
+        updateTutorMessages(completeHistory)
+        saveCurrentTutorHistory(completeHistory)
+        if (!payload.uncertainRecognition) {
+          voiceLearnerNameRef.current = learnerName
+          voiceStageRef.current = getNextVoiceStage(stage, payload.uncertainRecognition)
+        }
+        voiceOpeningPlayedRef.current = true
+        setVoiceLatencyMs(null)
+      } catch (error) {
+        queueFinished = true
+        wakeSpeechQueue()
+        await queuePromise
+        if (interruptedVoiceTurnRef.current === turnId) {
+          return
+        }
+        const actuallySpoken = `${completedSpeech}${currentSpeech.slice(0, currentSpeechBoundary)}`.trim()
+        if (actuallySpoken && activeVoiceTurnRef.current?.id === turnId) {
+          const partialHistory = [...history, { id: Date.now(), role: 'tutor' as const, text: actuallySpoken }]
+          updateTutorMessages(partialHistory)
+          saveCurrentTutorHistory(partialHistory)
+        }
+        if (controller.signal.aborted && queueFailure) {
+          setVoiceError(queueFailure instanceof Error
+            ? queueFailure.message
+            : `${learnerData.settings.tutorName} could not play this reply. Please try again.`)
+          setTutorRetryHistory(history)
+        } else if (!(error instanceof DOMException && error.name === 'AbortError')) {
+          setTutorError(error instanceof Error ? error.message : `${learnerData.settings.tutorName} could not reply. Check your connection and try again.`)
+          setTutorRetryHistory(history)
+        }
+      } finally {
+        if (voiceChatAbortRef.current === controller) voiceChatAbortRef.current = null
+        if (activeVoiceTurnRef.current?.id === turnId) activeVoiceTurnRef.current = null
+        if (turnId === voiceTurnIdRef.current) {
+          voiceSpeakingRef.current = false
+          tutorPendingRef.current = false
+          setVoiceSpeaking(false)
+          setTutorPending(false)
+          updateVoiceAudioLevel(0)
+          if (voiceConversationRef.current && !recognitionRunningRef.current) scheduleVoiceInput()
+        }
+      }
+  }
+
   async function startTutorOpening(
     scenario: RoleplayScenario | null,
-    freeChat: boolean,
     title: string,
     section: string,
   ) {
@@ -770,71 +1060,14 @@ function App() {
       setLiveSession(false)
       return
     }
-    const tutorName = learnerData.settings.tutorName
-    const learnerName = learnerData.settings.displayName.trim() || 'learner'
-    const openingPrompt = [
-      `Open a guided ${targetLanguage.name} speaking session for ${learnerName}. You are ${tutorName}; the selected area is "${title}" (${section}).`,
-      `In two or three short sentences, greet ${learnerName} by name, introduce yourself, say what you will practise today, and ask one easy check-in question.`,
-      `Speak in ${targetLanguage.name}; use ${sourceLanguage.name} only for brief support. Do not greet in another language.`,
-      freeChat ? 'Choose a friendly opening topic based on the learner interests.' : 'Stay focused on the selected lesson or roleplay area.',
-      freeChat ? `Keep the practice to about ${freeChatDurationMinutes} minutes and let the learner guide the topic${title !== 'Free chat' ? `, starting with "${title}"` : ''}.` : '',
-    ].join(' ')
-    const promptTurn: TutorMessage = { id: Date.now(), role: 'user', text: openingPrompt }
-    setTutorPending(true)
-    tutorPendingRef.current = true
+    voiceStageRef.current = 'opening'
+    voiceLearnerNameRef.current = learnerData.settings.displayName.trim()
+    updateTutorMessages([])
     setTutorError('')
     setVoiceError('')
-    try {
-      const welcome = await requestTutorReply(
-        [promptTurn],
-        Date.now() + 1,
-        learnerData.settings,
-        scenario,
-        freeChat,
-        title,
-        tutorAdaptationRef.current,
-        section,
-        'welcome',
-      )
-      const welcomeMessage = { ...welcome, role: 'tutor' as const }
-      updateTutorMessages([welcomeMessage])
-      const teachingPrompt: TutorMessage = {
-        id: Date.now() + 2,
-        role: 'user',
-        text: `Continue without greeting again. For the selected ${section} area "${title}", teach one useful ${targetLanguage.name} phrase at ${learnerData.settings.level}, then ask me to repeat or vary it. Prefer a relevant retrieved knowledge-base example; if none is available, use careful general knowledge and mark it unverified. Use my saved goals, interests, and due words when relevant.`,
-      }
-      try {
-        const teaching = await requestTutorReply(
-          [promptTurn, welcomeMessage, teachingPrompt],
-          Date.now() + 3,
-          learnerData.settings,
-          scenario,
-          freeChat,
-          title,
-          tutorAdaptationRef.current,
-          section,
-          'teaching',
-        )
-        const teachingMessage = { ...teaching, role: 'tutor' as const }
-        const openingMessages = [welcomeMessage, teachingMessage]
-        updateTutorMessages(openingMessages)
-        saveCurrentTutorHistory(openingMessages)
-        speakTutorReply({
-          ...teachingMessage,
-          text: `${welcomeMessage.text} ${teachingMessage.text}`,
-          meaning: [welcomeMessage.meaning, teachingMessage.meaning].filter(Boolean).join(' '),
-        })
-      } catch (error) {
-        saveCurrentTutorHistory([welcomeMessage])
-        speakTutorReply(welcomeMessage)
-        setTutorError(error instanceof Error ? error.message : `${tutorName} could not begin the lesson. Please retry.`)
-      }
-    } catch (error) {
-      setTutorError(error instanceof Error ? error.message : `${tutorName} could not start the session. Please retry.`)
-    } finally {
-      setTutorPending(false)
-      tutorPendingRef.current = false
-    }
+    setVoiceFallbackNotice('')
+    if (getSpeechRecognitionConstructor() && !recognitionRef.current) startVoiceConversation()
+    await runStreamingVoiceTurn([], 'opening', undefined, title, section)
   }
 
   function addMemoryItem(event: FormEvent<HTMLFormElement>) {
@@ -970,7 +1203,8 @@ function App() {
   }
 
   function speakWord(word: string, locale = 'zh-CN') {
-    void playSpeechAudio(word, locale, tutorVoiceGender, globalThis, { flavor: speechPreferences.flavor, rate: speechPreferences.rate }).catch((error: unknown) => {
+    unlockSpeechPlayback(globalThis)
+    void playSpeechAudio(word, locale, tutorVoiceGender, globalThis, getTutorSpeechOptions(locale)).catch((error: unknown) => {
       if (error instanceof DOMException && error.name === 'AbortError') return
       setVoiceError(error instanceof Error ? error.message : 'Ari’s local voice service could not play this speech.')
     })
@@ -981,7 +1215,11 @@ function App() {
     setPreviewingTutorVoice(tutorName)
     const preview = getTutorPreviewText(targetCode)
     try {
-      await playSpeechAudio(preview, targetLanguage.locale, getTutorSpeechGender(tutorName), globalThis, { flavor, rate: speechPreferences.rate })
+      unlockSpeechPlayback(globalThis)
+      await playSpeechAudio(preview, targetLanguage.locale, getTutorSpeechGender(tutorName), globalThis, {
+        ...getTutorSpeechOptions(),
+        flavor,
+      })
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return
       setVoiceError(error instanceof Error ? error.message : 'Ari’s local voice service could not play this voice sample.')
@@ -994,7 +1232,8 @@ function App() {
     if (!translation) return
     setTranslationMessage('Generating speech locally with Ari’s voice service…')
     try {
-      await playSpeechAudio(translation, targetLanguage.locale, tutorVoiceGender, globalThis, { flavor: speechPreferences.flavor, rate: speechPreferences.rate })
+      unlockSpeechPlayback(globalThis)
+      await playSpeechAudio(translation, targetLanguage.locale, tutorVoiceGender, globalThis, getTutorSpeechOptions())
       setTranslationMessage('')
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return
@@ -1004,7 +1243,7 @@ function App() {
 
   function startVoiceRecognition() {
     const recognition = recognitionRef.current
-    if (!recognition || !voiceConversationRef.current || tutorPendingRef.current || voiceSpeakingRef.current) return
+    if (!recognition || !voiceConversationRef.current) return
     try {
       speechAlternativesRef.current = []
       recognition.start()
@@ -1032,11 +1271,25 @@ function App() {
     if (recognitionTimerRef.current !== null) window.clearTimeout(recognitionTimerRef.current)
     recognitionTimerRef.current = window.setTimeout(() => {
       recognitionTimerRef.current = null
-      if (recognitionRunningRef.current) {
-        scheduleVoiceRecognition()
-        return
-      }
+      if (recognitionRunningRef.current) return
       startVoiceRecognition()
+    }, 300)
+  }
+
+  function scheduleVoiceInput() {
+    if (recognitionRef.current) {
+      scheduleVoiceRecognition()
+      return
+    }
+    if (recognitionTimerRef.current !== null) window.clearTimeout(recognitionTimerRef.current)
+    recognitionTimerRef.current = window.setTimeout(() => {
+      recognitionTimerRef.current = null
+      if (
+        !voiceConversationRef.current ||
+        tutorPendingRef.current ||
+        mediaRecorderRef.current?.state === 'recording'
+      ) return
+      void startMediaRecorderTurn()
     }, 300)
   }
 
@@ -1065,7 +1318,6 @@ function App() {
     setVoiceSpeaking(true)
     setVoiceListening(false)
     setVoiceTranscript(`${reply.text}${reply.meaning ? ` — ${reply.meaning}` : ''}`)
-    if (recognitionRunningRef.current) recognitionRef.current?.stop()
     const finishSpeaking = () => {
       if (generation !== speechGenerationRef.current) return
       voiceSpeakingRef.current = false
@@ -1079,8 +1331,7 @@ function App() {
     void (async () => {
       try {
         await playSpeechAudio(reply.text, targetLanguage.locale, tutorVoiceGender, globalThis, {
-          flavor: speechPreferences.flavor,
-          rate,
+          ...getTutorSpeechOptions(targetLanguage.locale, rate),
           onLevel: updateVoiceAudioLevel,
           onLevelError: (error) => setDataMessage(error instanceof Error
             ? `Tutor audio is playing, but the live mascot volume meter is unavailable: ${error.message}`
@@ -1093,8 +1344,7 @@ function App() {
         const spokenMeaning = reply.meaning?.trim()
         if (spokenMeaning) {
           await playSpeechAudio(spokenMeaning, sourceLanguage.locale, tutorVoiceGender, globalThis, {
-            flavor: speechPreferences.flavor,
-            rate,
+            ...getTutorSpeechOptions(sourceLanguage.locale, rate),
             onLevel: updateVoiceAudioLevel,
             onLevelError: (error) => setDataMessage(error instanceof Error
               ? `Tutor audio is playing, but the live mascot volume meter is unavailable: ${error.message}`
@@ -1117,11 +1367,135 @@ function App() {
     })()
   }
 
+  async function startMediaRecorderTurn() {
+    if (mediaRecorderRef.current?.state === 'recording') return
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder !== 'function') {
+      setVoiceError('This browser does not support microphone recording. Type your reply or use a browser with speech recognition.')
+      updateLearnerSettings({ liveTranscript: true })
+      return
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      mediaRecorderStreamRef.current = stream
+      mediaRecorderChunksRef.current = []
+      const supportedTypes = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4',
+        'audio/ogg;codecs=opus',
+      ]
+      const mimeType = supportedTypes.find((type) => MediaRecorder.isTypeSupported(type))
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+      mediaRecorderRef.current = recorder
+      recorder.ondataavailable = (event) => {
+        if (event.data.size) mediaRecorderChunksRef.current.push(event.data)
+      }
+      recorder.onerror = () => {
+        setVoiceError('The microphone recording failed. Check microphone access or type your reply.')
+        setVoiceListening(false)
+        mediaRecorderCancelledRef.current = true
+        mediaRecorderRef.current = null
+        mediaRecorderStreamRef.current?.getTracks().forEach((track) => track.stop())
+        mediaRecorderStreamRef.current = null
+      }
+      recorder.onstop = () => {
+        if (mediaRecorderTimeoutRef.current !== null) window.clearTimeout(mediaRecorderTimeoutRef.current)
+        mediaRecorderTimeoutRef.current = null
+        if (voiceActivityFrameRef.current !== null) window.cancelAnimationFrame(voiceActivityFrameRef.current)
+        voiceActivityFrameRef.current = null
+        mediaRecorderStreamRef.current?.getTracks().forEach((track) => track.stop())
+        mediaRecorderStreamRef.current = null
+        mediaRecorderRef.current = null
+        setVoiceListening(false)
+        if (mediaRecorderCancelledRef.current) {
+          mediaRecorderCancelledRef.current = false
+          mediaRecorderChunksRef.current = []
+          return
+        }
+        const blob = new Blob(mediaRecorderChunksRef.current, { type: recorder.mimeType || 'audio/webm' })
+        mediaRecorderChunksRef.current = []
+        if (!blob.size) {
+          setVoiceError('I didn’t hear speech. Tap the tutor and try again, or type your reply.')
+          if (voiceConversationRef.current) scheduleVoiceInput()
+          return
+        }
+        setTutorPending(true)
+        tutorPendingRef.current = true
+        setVoiceTranscript('Transcribing your reply…')
+        void requestVoiceTranscription(blob, targetCode).then((text) => {
+          if (!text) return
+          setLastLearnerSpeech(text)
+          updateLearnerSpeechDraft(text)
+          setVoiceTranscript(`You said: ${text}`)
+          tutorPendingRef.current = false
+          setTutorPending(false)
+          void sendTutorMessage(text)
+        }).catch((error: unknown) => {
+          tutorPendingRef.current = false
+          setTutorPending(false)
+          setVoiceError(error instanceof Error ? error.message : 'Speech recognition failed. Please type your reply.')
+          if (voiceConversationRef.current) scheduleVoiceInput()
+        })
+      }
+      recorder.start()
+      mediaRecorderCancelledRef.current = false
+      voiceConversationRef.current = true
+      setVoiceConversation(true)
+      setVoiceListening(true)
+      setVoiceError('')
+      setVoiceTranscript('Listening…')
+      mediaRecorderTimeoutRef.current = window.setTimeout(() => {
+        if (recorder.state === 'recording') recorder.stop()
+      }, 30_000)
+
+      const AudioContextConstructor = window.AudioContext
+        ?? (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+      if (AudioContextConstructor) {
+        const context = new AudioContextConstructor()
+        const analyser = context.createAnalyser()
+        analyser.fftSize = 512
+        context.createMediaStreamSource(stream).connect(analyser)
+        const samples = new Uint8Array(analyser.fftSize)
+        let heardSpeech = false
+        let lastVoiceAt = Date.now()
+        const monitorVoiceActivity = () => {
+          if (recorder.state !== 'recording') {
+            void context.close()
+            return
+          }
+          analyser.getByteTimeDomainData(samples)
+          const level = Math.sqrt(samples.reduce((sum, sample) => sum + ((sample - 128) / 128) ** 2, 0) / samples.length)
+          updateMicrophoneLevel(Math.min(1, level * 4))
+          if (level > 0.025) {
+            heardSpeech = true
+            lastVoiceAt = Date.now()
+          } else if (heardSpeech && Date.now() - lastVoiceAt >= 1200) {
+            recorder.stop()
+            void context.close()
+            return
+          }
+          voiceActivityFrameRef.current = window.requestAnimationFrame(monitorVoiceActivity)
+        }
+        voiceActivityFrameRef.current = window.requestAnimationFrame(monitorVoiceActivity)
+      }
+    } catch (error) {
+      const denied = error instanceof DOMException &&
+        (error.name === 'NotAllowedError' || error.name === 'SecurityError')
+      setVoiceError(denied
+        ? 'Microphone access was denied. Allow it in your browser settings, then try again.'
+        : error instanceof Error
+          ? `Couldn’t start recording: ${error.message}`
+          : 'Couldn’t start recording. Check microphone access and try again.')
+      mediaRecorderStreamRef.current?.getTracks().forEach((track) => track.stop())
+      mediaRecorderStreamRef.current = null
+      setVoiceListening(false)
+    }
+  }
+
   function startVoiceConversation() {
     const SpeechRecognition = getSpeechRecognitionConstructor()
     if (!SpeechRecognition) {
-      setVoiceError('Voice input is not supported in this browser. Try the latest version of Chrome or Edge.')
-      updateLearnerSettings({ liveTranscript: true })
+      void startMediaRecorderTurn()
       return
     }
     const recognition = new SpeechRecognition()
@@ -1185,11 +1559,20 @@ function App() {
         else interim += result[0].transcript
       }
       if (interim) {
-        updateLearnerSpeechDraft(interim)
-        setVoiceTranscript(interim)
+        const normalizedInterim = interim.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+        const normalizedTutorText = generatedVoiceReplyRef.current.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+        const likelyTutorEcho = normalizedInterim.length > 2 && normalizedTutorText.includes(normalizedInterim)
+        if ((voiceSpeakingRef.current || tutorPendingRef.current) && !likelyTutorEcho) {
+          interruptVoiceTutor()
+        }
+        if (!likelyTutorEcho) {
+          updateLearnerSpeechDraft(interim)
+          setVoiceTranscript(interim)
+        }
       }
       if (finalTranscript.trim()) {
         const text = finalTranscript.trim()
+        if (voiceSpeakingRef.current || tutorPendingRef.current) interruptVoiceTutor()
         tapTranscriptRef.current = [tapTranscriptRef.current, text].filter(Boolean).join(' ')
         tapAlternativesRef.current = [...tapAlternativesRef.current, ...alternatives].slice(-9)
         updateLearnerSpeechDraft(tapTranscriptRef.current)
@@ -1263,9 +1646,7 @@ function App() {
       if (
         voiceInputMode === 'tap' &&
         !tapToSendRef.current &&
-        voiceConversationRef.current &&
-        !tutorPendingRef.current &&
-        !voiceSpeakingRef.current
+        voiceConversationRef.current
       ) {
         scheduleVoiceRecognition()
       }
@@ -1277,21 +1658,7 @@ function App() {
     if (grammarHintWarning) setVoiceError(grammarHintWarning)
     setVoiceTranscript('')
     setVoiceLatencyMs(null)
-    const hasLearnerTurn = tutorMessages.some((message) => message.role === 'user')
-    if (voiceInputMode === 'hold' || hasLearnerTurn || voiceOpeningPlayedRef.current) {
-      startVoiceRecognition()
-    } else {
-      const openingMessages = tutorMessages.filter((message) => message.role === 'tutor')
-      const speakOpeningMessage = (index: number) => {
-        const message = openingMessages[index]
-        if (!message) {
-          scheduleVoiceRecognition()
-          return
-        }
-        speakTutorReply(message, () => speakOpeningMessage(index + 1))
-      }
-      speakOpeningMessage(0)
-    }
+    startVoiceRecognition()
   }
 
   function handleVoiceButton() {
@@ -1299,14 +1666,18 @@ function App() {
       startHomeLesson()
       return
     }
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop()
+      return
+    }
     if (voiceSpeakingRef.current) {
-      speechGenerationRef.current += 1
-      cancelSpeechPlayback()
-      voiceSpeakingRef.current = false
-      setVoiceSpeaking(false)
+      interruptVoiceTutor()
       updateVoiceAudioLevel(0)
       setVoiceTranscript(`${learnerData.settings.tutorName} paused. Go ahead.`)
-      startVoiceConversation()
+      if (!recognitionRunningRef.current) {
+        if (recognitionRef.current) startVoiceRecognition()
+        else void startMediaRecorderTurn()
+      }
       return
     }
     if (voiceInputMode === 'tap' && (voiceListening || speechReadyToSend) && (learnerSpeechDraft || tapTranscriptRef.current)) {
@@ -1347,10 +1718,7 @@ function App() {
     pushToTalkSessionRef.current = true
 
     if (voiceSpeakingRef.current) {
-      speechGenerationRef.current += 1
-      cancelSpeechPlayback()
-      voiceSpeakingRef.current = false
-      setVoiceSpeaking(false)
+      interruptVoiceTutor()
       setVoiceTranscript(`${learnerData.settings.tutorName} interrupted. Speak now, then release to send.`)
     }
 
@@ -1409,10 +1777,7 @@ function App() {
     updateLearnerSpeechDraft('')
     setVoiceError('')
     if (voiceSpeakingRef.current) {
-      speechGenerationRef.current += 1
-      cancelSpeechPlayback()
-      voiceSpeakingRef.current = false
-      setVoiceSpeaking(false)
+      interruptVoiceTutor()
       updateVoiceAudioLevel(0)
     }
     const currentRecognition = recognitionRef.current
@@ -1428,6 +1793,10 @@ function App() {
   }
 
   function cancelSpeechCapture() {
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderCancelledRef.current = true
+      mediaRecorderRef.current.stop()
+    }
     if (tapSilenceTimerRef.current !== null) window.clearTimeout(tapSilenceTimerRef.current)
     tapSilenceTimerRef.current = null
     tapToSendRef.current = false
@@ -1455,6 +1824,14 @@ function App() {
   }
 
   function stopVoiceConversation() {
+    interruptVoiceTutor()
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderCancelledRef.current = true
+      mediaRecorderRef.current.stop()
+    }
+    voiceTurnIdRef.current += 1
+    voiceChatAbortRef.current?.abort()
+    voiceChatAbortRef.current = null
     speechGenerationRef.current += 1
     voiceConversationRef.current = false
     holdToSpeakActiveRef.current = false
@@ -1488,6 +1865,7 @@ function App() {
   }
 
   function pauseVoiceConversation() {
+    interruptVoiceTutor()
     sessionPausedRef.current = true
     setSessionPaused(true)
     if (voiceSpeakingRef.current) tutorNeedsResumeSpeechRef.current = true
@@ -1554,7 +1932,12 @@ function App() {
     updateLearnerSpeechDraft('')
     setShowHelpPhrases(false)
     setTutorError('')
+    setVoiceFallbackNotice('')
     setTutorRetryHistory(null)
+    if (voiceConversationRef.current) {
+      await runStreamingVoiceTurn(nextHistory, voiceStageRef.current, speechEvidence)
+      return
+    }
     setTutorPending(true)
     tutorPendingRef.current = true
     if (recognitionRunningRef.current) {
@@ -1605,6 +1988,10 @@ function App() {
     setSpeechCorrectionEditing(false)
     setTutorError('')
     setTutorRetryHistory(null)
+    if (voiceConversationRef.current) {
+      await runStreamingVoiceTurn(correctedHistory, voiceStageRef.current)
+      return
+    }
     setTutorPending(true)
     tutorPendingRef.current = true
     if (recognitionRunningRef.current) {
@@ -1643,6 +2030,10 @@ function App() {
   async function retryTutorMessage() {
     if (!tutorRetryHistory || tutorPendingRef.current) return
     setTutorError('')
+    if (voiceConversationRef.current) {
+      await runStreamingVoiceTurn(tutorRetryHistory, voiceStageRef.current)
+      return
+    }
     setTutorPending(true)
     tutorPendingRef.current = true
     if (recognitionRunningRef.current) {
@@ -1675,8 +2066,7 @@ function App() {
     if (tutorPendingRef.current) return
     if (voiceConversationRef.current) stopVoiceConversation()
     const currentScenario = activeRoleplay
-    const isFreeChat = activeFreeChat
-    const title = currentScenario?.title ?? (isFreeChat ? freeChatTopic || 'Free chat' : activeLessonTitle)
+    const title = currentScenario?.title ?? (activeFreeChat ? freeChatTopic || 'Free chat' : activeLessonTitle)
     updateTutorMessages([])
     tutorSessionIdRef.current = ''
     tutorStartedAtRef.current = Date.now()
@@ -1689,7 +2079,7 @@ function App() {
     setRoleplayReflection([])
     setSessionSummary(null)
     voiceOpeningPlayedRef.current = false
-    void startTutorOpening(currentScenario, isFreeChat, title, activeSection)
+    void startTutorOpening(currentScenario, title, activeSection)
   }
 
   function beginRoleplay(scenario: RoleplayScenario, fromLesson = false, section = 'Social') {
@@ -1806,7 +2196,9 @@ function App() {
     setShowHelpPhrases(false)
     voiceConversationRef.current = true
     setVoiceConversation(true)
-    globalThis.speechSynthesis?.resume()
+    unlockSpeechPlayback(globalThis, (error) => setVoiceError(error instanceof Error
+      ? `Audio could not be unlocked: ${error.message}`
+      : 'Audio could not be unlocked. Tap the tutor again to enable sound.'))
     tutorSessionIdRef.current = ''
     tutorStartedAtRef.current = Date.now()
     tutorAdaptationRef.current = { failures: 0, outcomes: [], errorPatterns: {} }
@@ -1820,7 +2212,6 @@ function App() {
     setLiveSession(true)
     void startTutorOpening(
       activeRoleplay,
-      activeFreeChat,
       activeRoleplay?.title ?? (activeFreeChat ? freeChatTopic || 'Free chat' : activeLessonTitle),
       activeSection,
     )
@@ -2576,10 +2967,11 @@ function App() {
                     {tutorPending ? 'Thinking...' : voiceSpeaking ? `${learnerData.settings.tutorName} is speaking` : voiceListening ? voiceInputMode === 'hold' ? 'Listening... release to send' : 'Listening...' : speechReadyToSend ? 'Tap again to send' : 'Press to speak'}
                   </button>
                   {(voiceListening || speechReadyToSend) && <div className="speech-capture-line" aria-live="polite"><strong>You said:</strong> {learnerSpeechDraft || 'Listening…'} <button type="button" onClick={cancelSpeechCapture}>Cancel</button></div>}
-                  {lastLearnerSpeech && !voiceListening && !speechReadyToSend && <div className="speech-capture-line"><button type="button" onClick={() => { setTutorInput(lastLearnerSpeech); setSpeechCorrectionEditing(true); updateLearnerSettings({ liveTranscript: true }) }}><strong>You said:</strong> {lastLearnerSpeech}</button><button type="button" onClick={startSpeechRetry}>Say it again</button><button type="button" onClick={() => { setTutorInput(lastLearnerSpeech); setSpeechCorrectionEditing(true); updateLearnerSettings({ liveTranscript: true }) }}>That’s not what I said</button></div>}
+                  {lastLearnerSpeech && !speechReadyToSend && <div className="speech-capture-line"><button type="button" onClick={() => { setTutorInput(lastLearnerSpeech); setSpeechCorrectionEditing(true); updateLearnerSettings({ liveTranscript: true }) }}><strong>You said:</strong> {lastLearnerSpeech}</button><button type="button" onClick={startSpeechRetry}>Say it again</button><button type="button" onClick={() => { setTutorInput(lastLearnerSpeech); setSpeechCorrectionEditing(true); updateLearnerSettings({ liveTranscript: true }) }}>That’s not what I said</button></div>}
                   {voiceListening && <div className="microphone-meter" role="meter" aria-label="Microphone input level" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(microphoneLevel * 100)}><span style={{ transform: `scaleX(${microphoneLevel})` }} /></div>}
                   {voiceListening && microphoneLevel > .78 && <p className="voice-support-note" role="status">The room is noisy or the tutor may be echoing into your microphone. Move closer or try headphones.</p>}
                   {voiceListening && microphoneLevel < .006 && <p className="voice-support-note" role="status">No microphone level detected yet. Check that the microphone is not muted.</p>}
+                  {voiceFallbackNotice && <p className="voice-support-note" role="status">{voiceFallbackNotice}</p>}
                   {showHelpPhrases && <><p className="voice-help-prompt">Choose a phrase to hear it, then say it back to {learnerData.settings.tutorName}.</p>{helpPhraseOptions.map((option) => <button className="voice-help-phrase" type="button" key={option.phrase} onClick={() => playPracticePhrase(option)}>{option.phrase} <span>{option.translation}</span></button>)}</>}
                   {speechCorrectionEditing && <div className="speech-correction-editor"><label htmlFor="speech-correction-input-live">Correct what you said</label><input id="speech-correction-input-live" value={tutorInput} onChange={(event) => setTutorInput(event.target.value)} /><button type="button" disabled={!tutorInput.trim() || tutorPending} onClick={() => void replaceLastSpeechTurn(tutorInput)}>Send corrected reply</button></div>}
                   {learnerData.settings.liveTranscript && (voiceTranscript || voiceListening)
@@ -2622,6 +3014,7 @@ function App() {
                           <div className="message-content">
                             <span className="message-author">{message.role === 'tutor' ? learnerData.settings.tutorName.toUpperCase() : 'YOU'}</span>
                             <p className="message-text" lang={message.role === 'tutor' ? targetLanguage.locale : undefined}>{message.text.split(/(\s+)/).map((part, partIndex) => /\S/.test(part) ? <button className="transcript-word" type="button" key={`${message.id}-${partIndex}`} onClick={() => saveTranscriptWord(part, message.meaning ?? '', message.id)} title="Save this word for review">{part}</button> : part)}</p>
+                            {message.role === 'tutor' && message.phraseCard && <div className="voice-phrase-card" lang={targetLanguage.locale}><strong>{message.phraseCard.phrase}</strong>{message.phraseCard.pinyin && <span>{message.phraseCard.pinyin}</span>}{message.phraseCard.meaning && <small>{message.phraseCard.meaning}</small>}{message.phraseCard.toneTip && <small>{message.phraseCard.toneTip}</small>}</div>}
                             {message.role === 'tutor' && showPinyin && message.pinyin && <p className="message-pinyin">{message.pinyin}</p>}
                             {message.role === 'tutor' && showMeaning && message.meaning && <p className="message-meaning">{message.meaning}</p>}
                             {message.role === 'tutor' && message.note && <div className="message-coach-note"><Icon name="sparkles" size={14} /><span>{message.note}</span></div>}
@@ -2832,7 +3225,8 @@ function App() {
             </section>
             <section className="settings-card speech-settings-card">
               <div className="settings-section-intro"><p className="eyebrow">TUTOR & VOICE</p><h3>Make your tutor yours</h3><p>Cloud speech uses the same MeloTTS voice for Ari and Ira; its hosted API does not offer a voice-gender selector. Browser fallback depends on voices installed on this device.</p></div>
-              <div className="setting-row"><span><strong>Tutor voice</strong><small>Cloud speech currently uses one voice for both tutors</small></span><span className="level-chip">MeloTTS · {targetLanguage.name}</span></div>
+              <div className="setting-row"><span><strong>Speech provider</strong><small>Use a matching voice installed on this device or Cloudflare MeloTTS</small></span><label className="settings-select"><select aria-label="Tutor speech provider" value={learnerData.settings.speechProvider} onChange={(event) => updateLearnerSettings({ speechProvider: event.target.value as 'browser' | 'cloudflare' })}><option value="browser">Browser voice · recommended</option><option value="cloudflare">Cloudflare MeloTTS</option></select><Icon name="chevron" size={16} /></label></div>
+              <div className="setting-row"><span><strong>Tutor voice</strong><small>{learnerData.settings.speechProvider === 'browser' ? 'Ari prefers a male voice and Ira a female voice when the device provides them' : 'Cloud speech currently uses one voice for both tutors'}</small></span><span className="level-chip">{learnerData.settings.speechProvider === 'browser' ? 'Device voice · ' : 'MeloTTS · '}{targetLanguage.name}</span></div>
               <div className="speech-gender-choices" role="group" aria-label="Choose tutor and voice preference">
                 {([
                   { tutor: 'Ari' as const, gender: 'male', label: 'Ari · male preference' },

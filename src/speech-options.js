@@ -137,7 +137,7 @@ export async function requestLocalSpeech(text, locale, gender, fetcher = fetch, 
   const body = buildLocalSpeechRequest(text, locale, gender)
   let response
   try {
-    response = await fetcher('/api/ari/tts', {
+    response = await fetcher('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

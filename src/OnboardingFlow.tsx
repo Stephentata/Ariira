@@ -233,6 +233,7 @@ export default function OnboardingFlow({ initialTargetCode, initialNativeCode, o
     const preview = getTutorPreviewText(targetLanguage.code)
     try {
       await playSpeechAudio(preview, targetLanguage.locale, getTutorSpeechGender(tutor), globalThis, {
+        provider: 'browser',
         flavor: tutor === 'Ari' ? 'Playful' : 'Lively',
         rate: 1,
       })

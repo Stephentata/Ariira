@@ -21,6 +21,7 @@ export const DEFAULT_LEARNER_SETTINGS = Object.freeze({
   targetLanguageCode: 'zh',
   tutorName: 'Ira',
   tutorMode: 'balanced',
+  speechProvider: 'browser',
   onboardingComplete: false,
   displayName: '',
   level: 'A1',
@@ -51,6 +52,7 @@ function isLearnerSettings(value) {
     (value.targetLanguageCode === undefined || SUPPORTED_LANGUAGE_CODES.has(value.targetLanguageCode)) &&
     (value.tutorName === undefined || value.tutorName === 'Ari' || value.tutorName === 'Ira') &&
     (value.tutorMode === undefined || ['soft', 'balanced', 'strict'].includes(value.tutorMode)) &&
+    (value.speechProvider === undefined || ['browser', 'cloudflare'].includes(value.speechProvider)) &&
     (value.onboardingComplete === undefined || typeof value.onboardingComplete === 'boolean') &&
     (value.displayName === undefined || (typeof value.displayName === 'string' && value.displayName.length <= 60)) &&
     (value.level === undefined || ['A0', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2'].includes(value.level)) &&
@@ -90,6 +92,7 @@ export function readLearnerSettings(storage) {
     targetLanguageCode: parsed.targetLanguageCode ?? DEFAULT_LEARNER_SETTINGS.targetLanguageCode,
     tutorName: parsed.tutorName ?? DEFAULT_LEARNER_SETTINGS.tutorName,
     tutorMode: parsed.tutorMode ?? DEFAULT_LEARNER_SETTINGS.tutorMode,
+    speechProvider: parsed.speechProvider ?? DEFAULT_LEARNER_SETTINGS.speechProvider,
     onboardingComplete: parsed.onboardingComplete ?? DEFAULT_LEARNER_SETTINGS.onboardingComplete,
     displayName: parsed.displayName ?? DEFAULT_LEARNER_SETTINGS.displayName,
     level: parsed.level ?? DEFAULT_LEARNER_SETTINGS.level,
@@ -125,6 +128,7 @@ export function saveLearnerSettings(storage, settings) {
     targetLanguageCode: settings.targetLanguageCode ?? DEFAULT_LEARNER_SETTINGS.targetLanguageCode,
     tutorName: settings.tutorName ?? DEFAULT_LEARNER_SETTINGS.tutorName,
     tutorMode: settings.tutorMode ?? DEFAULT_LEARNER_SETTINGS.tutorMode,
+    speechProvider: settings.speechProvider ?? DEFAULT_LEARNER_SETTINGS.speechProvider,
     onboardingComplete: settings.onboardingComplete ?? DEFAULT_LEARNER_SETTINGS.onboardingComplete,
     displayName: settings.displayName?.trim() ?? DEFAULT_LEARNER_SETTINGS.displayName,
     level: settings.level ?? DEFAULT_LEARNER_SETTINGS.level,

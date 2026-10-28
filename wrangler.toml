@@ -1,0 +1,10 @@
+name = "ariira-staging"
+pages_build_output_dir = "./dist"
+compatibility_date = "2026-10-28"
+
+[ai]
+binding = "AI"
+
+[vars]
+CHAT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+STT_MODEL = "@cf/openai/whisper-large-v3-turbo"

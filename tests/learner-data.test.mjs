@@ -37,6 +37,7 @@ test('transcript saving defaults off and learner profile settings validate and p
     targetLanguageCode: 'zh',
     tutorName: 'Ira',
     tutorMode: 'balanced',
+    speechProvider: 'browser',
     onboardingComplete: false,
     displayName: '',
     level: 'A1',
@@ -48,6 +49,9 @@ test('transcript saving defaults off and learner profile settings validate and p
     practiceTimeOfDay: '',
     reminderEnabled: false,
   })
+  saveLearnerSettings(storage, { ...readLearnerSettings(storage), speechProvider: 'cloudflare' })
+  assert.equal(readLearnerSettings(storage).speechProvider, 'cloudflare')
+  saveLearnerSettings(storage, { ...readLearnerSettings(storage), speechProvider: 'browser' })
   saveLearnerSettings(storage, { ...readLearnerSettings(storage), targetLanguageCode: 'fr' })
   assert.equal(readLearnerSettings(storage).targetLanguageCode, 'fr')
   saveLearnerSettings(storage, { ...readLearnerSettings(storage), tutorName: 'Ari', tutorMode: 'strict' })
@@ -66,6 +70,7 @@ test('transcript saving defaults off and learner profile settings validate and p
     targetLanguageCode: 'ja',
     tutorName: 'Ira',
     tutorMode: 'balanced',
+    speechProvider: 'browser',
     onboardingComplete: false,
     displayName: '',
     level: 'A1',
@@ -90,6 +95,7 @@ test('transcript saving defaults off and learner profile settings validate and p
     targetLanguageCode: 'ja',
     tutorName: 'Ira',
     tutorMode: 'balanced',
+    speechProvider: 'browser',
     onboardingComplete: false,
     displayName: '',
     level: 'A1',

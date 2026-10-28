@@ -115,7 +115,7 @@ test('local speech client returns valid audio and surfaces service errors', asyn
     request = { url, options }
     return new Response(new Blob([audioBytes], { type: 'audio/wav' }), { status: 200 })
   })
-  assert.equal(request.url, '/api/ari/tts')
+  assert.equal(request.url, '/api/tts')
   assert.equal(request.options.method, 'POST')
   assert.equal(JSON.parse(request.options.body).gender, 'male')
   assert.deepEqual(new Uint8Array(await audio.arrayBuffer()), audioBytes)

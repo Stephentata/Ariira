@@ -2824,6 +2824,32 @@ p {
   color: #9a886f;
 }
 
+.voice-phrase-card {
+  display: grid;
+  gap: 3px;
+  margin-top: 9px;
+  padding: 9px 11px;
+  border: 1px solid #e8dfce;
+  border-radius: 10px;
+  background: #faf7f0;
+  color: #625a4c;
+  font-size: 10px;
+}
+
+.voice-phrase-card strong {
+  color: #34372f;
+  font-family: var(--display);
+  font-size: 16px;
+}
+
+.voice-phrase-card span {
+  color: #9a886f;
+}
+
+.voice-phrase-card small {
+  color: #837d71;
+}
+
 .message-coach-note {
   display: flex;
   align-items: flex-start;

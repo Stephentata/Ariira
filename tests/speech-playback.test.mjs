@@ -48,6 +48,31 @@ test('browser voice selection prefers the requested gender in the target languag
   assert.equal(selectBrowserSpeechVoice([{ name: 'Default Voice', lang: 'fr-FR', default: true }], 'fr-FR', 'female')?.name, 'Default Voice')
 })
 
+test('browser voice selection prioritizes language-specific tutor name hints', () => {
+  const voices = [
+    { name: 'Yunxi Online', lang: 'zh-CN' },
+    { name: 'Xiaoxiao Online', lang: 'zh-CN' },
+  ]
+  assert.equal(selectBrowserSpeechVoice(voices, 'zh-CN', 'female', '', ['Xiaoxiao']), voices[1])
+  assert.equal(selectBrowserSpeechVoice(voices, 'zh-CN', 'male', '', ['Yunxi']), voices[0])
+})
+
+test('browser speech provider skips the Cloudflare request', async () => {
+  const browser = createBrowserSpeech([{ name: 'Female English', lang: 'en-US' }])
+  const originalFetch = globalThis.fetch
+  let fetchCalled = false
+  globalThis.fetch = async () => {
+    fetchCalled = true
+    throw new Error('Should not call hosted speech')
+  }
+  try {
+    await playSpeechAudio('Hello!', 'en-US', 'female', browser.apis, { provider: 'browser' })
+    assert.equal(fetchCalled, false)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test('local playback failure falls back to browser synthesis using the selected voice and locale', async () => {
   const voices = [
     { name: 'French female', lang: 'fr-FR' },
@@ -60,6 +85,27 @@ test('local playback failure falls back to browser synthesis using the selected 
   assert.equal(browser.getUtterance().text, 'Bonjour !')
   assert.equal(browser.getUtterance().lang, 'fr-FR')
   assert.equal(browser.getUtterance().voice, voices[0])
+})
+
+test('hosted audio playback failure falls back to browser synthesis', async () => {
+  const browser = createBrowserSpeech([{ name: 'French female', lang: 'fr-FR' }])
+  let fallbackError
+  browser.apis.Audio = class {
+    play() { return Promise.reject(new Error('Audio playback was blocked.')) }
+    pause() {}
+    removeAttribute() {}
+    load() {}
+  }
+  await playSpeechAudio('Salut, comment allez-vous aujourd’hui ?', 'fr-FR', 'female', browser.apis, {
+    provider: 'cloudflare',
+    fetcher: async () => new Response(new Uint8Array([1, 2, 3]), {
+      headers: { 'Content-Type': 'audio/mpeg' },
+    }),
+    onFallback: (error) => { fallbackError = error },
+  })
+  assert.equal(browser.getUtterance().text, 'Salut, comment allez-vous aujourd’hui ?')
+  assert.equal(browser.getUtterance().voice.name, 'French female')
+  assert.match(fallbackError.message, /blocked/)
 })
 
 test('spoken tutor names use their supplied phonetic forms in browser fallback', async () => {

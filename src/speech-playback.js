@@ -9,6 +9,8 @@ let activeSpeechSynthesis = null
 let activeSpeechUtterance = null
 let rejectActiveSpeech = null
 let activeLevelCallback = null
+const cloudSpeechCache = new Map()
+let unlockedAudioContext = null
 
 const femaleVoiceNames = /\b(?:female|woman|girl|samantha|victoria|zira|karen|moira|tessa|susan|eva|alice|jenny|aria|ava)\b/i
 const maleVoiceNames = /\b(?:male|man|boy|daniel|david|alex|fred|george|guy|james|oliver|tom)\b/i
@@ -17,7 +19,35 @@ export function prepareTutorSpeechText(text) {
   return text.replace(/\bAri\b/gi, 'Ah-ree').replace(/\bIra\b/gi, 'Eye-rah')
 }
 
-export function selectBrowserSpeechVoice(voices, locale, gender, flavor = '') {
+export function unlockSpeechPlayback(browserApis = globalThis, onError = () => {}) {
+  try {
+    const synthesis = browserApis.speechSynthesis
+    const Utterance = browserApis.SpeechSynthesisUtterance
+    if (synthesis && typeof Utterance === 'function') {
+      synthesis.resume()
+      const silentUtterance = new Utterance(' ')
+      silentUtterance.volume = 0
+      synthesis.speak(silentUtterance)
+    }
+    const AudioContextConstructor = browserApis.AudioContext
+      ?? browserApis.webkitAudioContext
+    if (typeof AudioContextConstructor === 'function') {
+      unlockedAudioContext ??= new AudioContextConstructor()
+      void unlockedAudioContext.resume().catch(onError)
+      const oscillator = unlockedAudioContext.createOscillator()
+      const gain = unlockedAudioContext.createGain()
+      gain.gain.value = 0
+      oscillator.connect(gain)
+      gain.connect(unlockedAudioContext.destination)
+      oscillator.start()
+      oscillator.stop(unlockedAudioContext.currentTime + 0.01)
+    }
+  } catch (error) {
+    onError(error)
+  }
+}
+
+export function selectBrowserSpeechVoice(voices, locale, gender, flavor = '', nameHints = []) {
   if (!Array.isArray(voices) || typeof locale !== 'string' || !locale.trim()) return null
   if (gender !== 'female' && gender !== 'male') return null
   const genderPattern = gender === 'female' ? femaleVoiceNames : maleVoiceNames
@@ -33,6 +63,13 @@ export function selectBrowserSpeechVoice(voices, locale, gender, flavor = '') {
     Bold: /\b(?:bold|strong|tom|james)\b/i,
     Calm: /\b(?:calm|relaxed|fred|oliver)\b/i,
   }[flavor]
+  const prioritizedHints = Array.isArray(nameHints)
+    ? nameHints.filter((hint) => typeof hint === 'string' && hint.trim())
+    : []
+  for (const hint of prioritizedHints) {
+    const match = matchingLanguage.find((voice) => (voice.name ?? '').toLowerCase().includes(hint.toLowerCase()))
+    if (match) return match
+  }
   return matchingLanguage.find((voice) => flavorPattern?.test(voice.name ?? '') && genderPattern.test(voice.name ?? ''))
     ?? matchingLanguage.find((voice) => genderPattern.test(voice.name ?? ''))
     ?? matchingLanguage[0]
@@ -118,7 +155,7 @@ async function playBrowserSpeech(text, locale, gender, browserApis, generation, 
   }
   const utterance = new Utterance(text)
   utterance.lang = locale
-  const voice = selectBrowserSpeechVoice(voices, locale, gender, options.flavor)
+  const voice = selectBrowserSpeechVoice(voices, locale, gender, options.flavor, options.voiceNameHints)
   if (!voice) {
     activeSpeechSynthesis = null
     throw new Error(`No installed browser voice supports ${locale}. Configure hosted speech for this language or add a matching voice in your device settings. Speech service detail: ${localError instanceof Error ? localError.message : 'unavailable'}`)
@@ -183,11 +220,28 @@ export async function playSpeechAudio(text, locale, gender, browserApis = global
   buildLocalSpeechRequest(speechText, locale, gender)
   cancelSpeechPlayback()
   const generation = playbackGeneration
+  if (options.provider === 'browser') {
+    return playBrowserSpeech(
+      speechText,
+      locale,
+      gender,
+      browserApis,
+      generation,
+      new Error('Browser speech synthesis was selected.'),
+      options,
+    )
+  }
   const controller = new AbortController()
   activeController = controller
   let audioBlob
   try {
-    audioBlob = await requestLocalSpeech(speechText, locale, gender, fetch, controller.signal)
+    const cacheKey = `${locale.toLowerCase()}|${gender}|${speechText}`
+    audioBlob = cloudSpeechCache.get(cacheKey)
+    if (!audioBlob) {
+      audioBlob = await requestLocalSpeech(speechText, locale, gender, options.fetcher ?? fetch, controller.signal)
+      if (cloudSpeechCache.size >= 64) cloudSpeechCache.delete(cloudSpeechCache.keys().next().value)
+      cloudSpeechCache.set(cacheKey, audioBlob)
+    }
   } catch (error) {
     if (
       generation !== playbackGeneration ||
@@ -197,6 +251,7 @@ export async function playSpeechAudio(text, locale, gender, browserApis = global
       throw error
     }
     activeController = null
+    options.onFallback?.(error)
     return playBrowserSpeech(speechText, locale, gender, browserApis, generation, error, options)
   }
 
@@ -206,77 +261,89 @@ export async function playSpeechAudio(text, locale, gender, browserApis = global
 
   activeController = null
   const objectUrl = URL.createObjectURL(audioBlob)
-  const audio = new Audio(objectUrl)
+  const AudioConstructor = browserApis.Audio ?? Audio
+  const audio = new AudioConstructor(objectUrl)
   audio.playbackRate = getVoiceDelivery(options.flavor, options.rate).rate
   activeObjectUrl = objectUrl
   activeAudio = audio
   activeLevelCallback = options.onLevel ?? null
 
-  return new Promise((resolve, reject) => {
-    let audioContext = null
-    let animationFrame = null
-    let lastBoundaryStart = -1
-    const reportLevel = (level) => options.onLevel?.(level)
-    const cleanup = () => {
-      audio.onended = null
-      audio.onerror = null
-      if (animationFrame !== null) cancelAnimationFrame(animationFrame)
-      reportLevel(0)
-      if (activeAudio === audio) activeAudio = null
-      if (activeObjectUrl === objectUrl) activeObjectUrl = null
-      if (activeAudioCancel === cancel) activeAudioCancel = null
-      URL.revokeObjectURL(objectUrl)
-      if (audioContext) {
-        void audioContext.close().catch((error) => options.onLevelError?.(error))
+  try {
+    await new Promise((resolve, reject) => {
+      let audioContext = null
+      let animationFrame = null
+      let lastBoundaryStart = -1
+      const reportLevel = (level) => options.onLevel?.(level)
+      const cleanup = () => {
+        audio.onended = null
+        audio.onerror = null
+        if (animationFrame !== null) cancelAnimationFrame(animationFrame)
+        reportLevel(0)
+        if (activeAudio === audio) activeAudio = null
+        if (activeObjectUrl === objectUrl) activeObjectUrl = null
+        if (activeAudioCancel === cancel) activeAudioCancel = null
+        URL.revokeObjectURL(objectUrl)
+        if (audioContext) {
+          void audioContext.close().catch((error) => options.onLevelError?.(error))
+        }
       }
-    }
-    const cancel = (error) => {
-      audio.pause()
-      audio.removeAttribute('src')
-      audio.load()
-      cleanup()
-      reject(error)
-    }
-    audio.onended = () => {
-      cleanup()
-      resolve()
-    }
-    audio.onerror = () => {
-      cleanup()
-      reject(new Error('Your browser could not play the audio generated by Ari’s local voice service.'))
-    }
-    activeAudioCancel = cancel
-    try {
-      audioContext = new AudioContext()
-      const source = audioContext.createMediaElementSource(audio)
-      const analyser = audioContext.createAnalyser()
-      analyser.fftSize = 256
-      source.connect(analyser)
-      analyser.connect(audioContext.destination)
-      const samples = new Uint8Array(analyser.frequencyBinCount)
-      const sampleLevel = () => {
-        analyser.getByteTimeDomainData(samples)
-        const rms = Math.sqrt(samples.reduce((sum, value) => sum + ((value - 128) / 128) ** 2, 0) / samples.length)
-        reportLevel(Math.min(1, rms * 4))
-        if (Number.isFinite(audio.duration) && audio.duration > 0 && text.length > 0) {
-          const currentCharacter = Math.min(text.length - 1, Math.floor(audio.currentTime / audio.duration * text.length))
-          const wordStart = text.lastIndexOf(' ', currentCharacter) + 1
-          if (wordStart !== lastBoundaryStart) {
-            lastBoundaryStart = wordStart
-            const nextSpace = text.indexOf(' ', currentCharacter)
-            options.onBoundary?.(wordStart, (nextSpace < 0 ? text.length : nextSpace) - wordStart)
+      const cancel = (error) => {
+        audio.pause()
+        audio.removeAttribute('src')
+        audio.load()
+        cleanup()
+        reject(error)
+      }
+      audio.onended = () => {
+        cleanup()
+        resolve()
+      }
+      audio.onerror = () => {
+        cleanup()
+        reject(new Error('Your browser could not play the audio generated by Ari’s local voice service.'))
+      }
+      activeAudioCancel = cancel
+      try {
+        audioContext = new AudioContext()
+        const source = audioContext.createMediaElementSource(audio)
+        const analyser = audioContext.createAnalyser()
+        analyser.fftSize = 256
+        source.connect(analyser)
+        analyser.connect(audioContext.destination)
+        const samples = new Uint8Array(analyser.frequencyBinCount)
+        const sampleLevel = () => {
+          analyser.getByteTimeDomainData(samples)
+          const rms = Math.sqrt(samples.reduce((sum, value) => sum + ((value - 128) / 128) ** 2, 0) / samples.length)
+          reportLevel(Math.min(1, rms * 4))
+          if (Number.isFinite(audio.duration) && audio.duration > 0 && text.length > 0) {
+            const currentCharacter = Math.min(text.length - 1, Math.floor(audio.currentTime / audio.duration * text.length))
+            const wordStart = text.lastIndexOf(' ', currentCharacter) + 1
+            if (wordStart !== lastBoundaryStart) {
+              lastBoundaryStart = wordStart
+              const nextSpace = text.indexOf(' ', currentCharacter)
+              options.onBoundary?.(wordStart, (nextSpace < 0 ? text.length : nextSpace) - wordStart)
+            }
           }
+          animationFrame = requestAnimationFrame(sampleLevel)
         }
         animationFrame = requestAnimationFrame(sampleLevel)
+      } catch (error) {
+        options.onLevelError?.(error)
+        reportLevel(0.35)
       }
-      animationFrame = requestAnimationFrame(sampleLevel)
-    } catch (error) {
-      options.onLevelError?.(error)
-      reportLevel(0.35)
-    }
-    audio.play().catch((error) => {
-      cleanup()
-      reject(error instanceof Error ? error : new Error('Audio playback was blocked by the browser.'))
+      audio.play().catch((error) => {
+        cleanup()
+        reject(error instanceof Error ? error : new Error('Audio playback was blocked by the browser.'))
+      })
     })
-  })
+  } catch (error) {
+    if (
+      generation !== playbackGeneration ||
+      (error instanceof DOMException && error.name === 'AbortError')
+    ) {
+      throw error
+    }
+    options.onFallback?.(error)
+    return playBrowserSpeech(speechText, locale, gender, browserApis, generation, error, options)
+  }
 }

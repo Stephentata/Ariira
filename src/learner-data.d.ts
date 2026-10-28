@@ -12,6 +12,7 @@ export type LearnerSettings = {
   targetLanguageCode: string
   tutorName: 'Ari' | 'Ira'
   tutorMode: 'soft' | 'balanced' | 'strict'
+  speechProvider: 'browser' | 'cloudflare'
   onboardingComplete: boolean
   displayName: string
   level: 'A0' | 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2'
